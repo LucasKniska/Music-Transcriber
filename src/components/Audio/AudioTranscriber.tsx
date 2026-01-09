@@ -1,159 +1,168 @@
 import React, { useEffect, useState, useRef } from 'react';
 
-declare global {
-  interface Window {
-    webkitAudioContext: typeof AudioContext;
-  }
-}
-
-// Define the shape of the data coming from Python
+// Define the shape of data coming back from Python
 interface NoteEvent {
-  note: string;
-  type: 'ON' | 'OFF';
-}
-
-interface ServerResponse {
-  events: NoteEvent[];
+  type: 'note_on' | 'note_off' | 're_trigger' | 'volume' | 'silence_reset';
+  note?: string;
+  midi?: number;
+  event?: string;
+  value?: number;
 }
 
 const AudioTranscriber: React.FC = () => {
-  const [notes, setNotes] = useState<NoteEvent[]>([]);
-  const [isListening, setIsListening] = useState<boolean>(false);
+  const [activeNotes, setActiveNotes] = useState<string[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
+  const [volume, setVolume] = useState(0);
 
-  // Refs need specific types for WebSocket and AudioContext
+  // Refs for persistent connections
   const socketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
 
-  const startListening = async () => {
+  const startStreaming = async () => {
     // 1. Initialize WebSocket
-    socketRef.current = new WebSocket('ws://localhost:8000/ws/audio');
+    socketRef.current = new WebSocket('ws://localhost:8000');
 
-    socketRef.current.onopen = () => {
-      console.log("WebSocket Connected");
-      setIsListening(true);
-    };
-
-    socketRef.current.onmessage = (event: MessageEvent) => {
+    socketRef.current.onopen = async () => {
+      console.log("WebSocket connected. Starting Audio...");
+      setIsConnected(true);
+      
       try {
-        const data: ServerResponse = JSON.parse(event.data);
-        // Safely update state with new notes
-        setNotes((prev) => [...prev, ...data.events]);
-      } catch (error) {
-        console.error("Failed to parse server message:", event.data);
-        console.error("Error:", error)
+        // 2. Request Microphone Access
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: false,
+            autoGainControl: false,
+            noiseSuppression: false,
+            channelCount: 1
+          } 
+        });
+
+        // 3. Create Audio Context at 22050Hz (Required by Basic Pitch Model)
+        // This automatically handles resampling if your mic is 48k
+        const audioContext = new window.AudioContext({ sampleRate: 22050 });
+        audioContextRef.current = audioContext;
+
+        await audioContext.audioWorklet.addModule('/audioProcessor.js');
+
+        const source = audioContext.createMediaStreamSource(stream);
+        const workletNode = new AudioWorkletNode(audioContext, 'audio-processor');
+        workletNodeRef.current = workletNode;
+
+        // 4. Handle Data Flow: Worklet -> Main Thread -> WebSocket
+        workletNode.port.onmessage = (event) => {
+          if (socketRef.current?.readyState === WebSocket.OPEN) {
+            // Send Float32Array directly as binary
+            socketRef.current.send(event.data);
+          }
+        };
+
+        source.connect(workletNode);
+        workletNode.connect(audioContext.destination); // Keep graph alive
+
+      } catch (err) {
+        console.error("Audio setup failed:", err);
+        socketRef.current?.close();
       }
     };
 
-    socketRef.current.onerror = (error) => {
-      console.error("WebSocket Error:", error);
+    socketRef.current.onmessage = (event) => {
+      try {
+        const data: NoteEvent = JSON.parse(event.data);
+        handleServerEvent(data);
+      } catch (e) {
+        console.error("JSON Parse Error", e);
+      }
     };
 
-    // 2. Initialize Audio Context
-    try {
-      // FIX PART 1: Request 44.1kHz from the microphone hardware
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          sampleRate: 44100,     // <--- ADD THIS
-          echoCancellation: false,
-          autoGainControl: false,
-          noiseSuppression: false
-        }
-      });
-
-      // Handle cross-browser compatibility
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-
-      // FIX PART 2: Force the Web Audio API to run at 44.1kHz
-      // This ensures the math in Python (divide by 2) results in 22050Hz
-      audioContextRef.current = new AudioContextClass({
-        sampleRate: 44100      // <--- ADD THIS
-      });
-
-      const ctx = audioContextRef.current;
-
-      // Ensure context is running (sometimes browsers suspend it)
-      if (ctx.state === 'suspended') {
-        await ctx.resume();
-      }
-
-      // Add the AudioWorklet module
-      // Note: This path is relative to the PUBLIC folder
-      await ctx.audioWorklet.addModule('/audioProcessor.js');
-
-      // Create Nodes
-      const source = ctx.createMediaStreamSource(stream);
-      const processor = new AudioWorkletNode(ctx, 'audio-processor');
-
-      // 3. Bridge Audio -> WebSocket
-      processor.port.onmessage = (event: MessageEvent<Float32Array>) => {
-        if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-          // Send the raw buffer to Python
-          socketRef.current.send(event.data);
-        }
-      };
-
-      // Connect graph
-      source.connect(processor);
-      // Connect to destination to prevent garbage collection (even if we don't hear it)
-      processor.connect(ctx.destination);
-
-    } catch (err) {
-      console.error("Error accessing microphone:", err);
-      alert("Microphone access denied or error occurred.");
-      setIsListening(false);
-    }
+    socketRef.current.onclose = () => {
+      setIsConnected(false);
+      stopAudio();
+    };
   };
 
-  const stopListening = () => {
-    if (socketRef.current) {
-      socketRef.current.close();
-      socketRef.current = null;
-    }
+  const stopAudio = () => {
     if (audioContextRef.current) {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
-    setIsListening(false);
+    if (socketRef.current) {
+      socketRef.current.close();
+      socketRef.current = null;
+    }
+    setActiveNotes([]);
+    setVolume(0);
   };
 
-  // Cleanup on unmount
+  const handleServerEvent = (data: NoteEvent) => {
+    switch (data.type) {
+      case 'note_on':
+        if (data.note) {
+          setActiveNotes(prev => {
+             // Avoid duplicate visual keys
+             if (!prev.includes(data.note!)) return [...prev, data.note!];
+             return prev;
+          });
+        }
+        break;
+      case 'note_off':
+        setActiveNotes(prev => prev.filter(n => n !== data.note));
+        break;
+      case 'volume':
+        if (data.value !== undefined) setVolume(data.value);
+        break;
+      case 'silence_reset':
+        setActiveNotes([]);
+        break;
+    }
+  };
+
   useEffect(() => {
-    return () => {
-      stopListening();
-    };
+    return () => stopAudio(); // Cleanup on unmount
   }, []);
 
   return (
-    <div style={{ padding: '20px' }}>
-      <h2>Real-time AI Transcription</h2>
+    <div style={{ padding: '40px', fontFamily: 'sans-serif', textAlign: 'center' }}>
+      <h1>Web Tuner</h1>
+      
+      {!isConnected ? (
+        <button 
+          onClick={startStreaming}
+          style={{ padding: '15px 30px', fontSize: '18px', cursor: 'pointer', background: '#007bff', color: 'white', border: 'none', borderRadius: '5px' }}
+        >
+          Start Microphone
+        </button>
+      ) : (
+        <button 
+          onClick={stopAudio}
+          style={{ padding: '15px 30px', fontSize: '18px', cursor: 'pointer', background: '#dc3545', color: 'white', border: 'none', borderRadius: '5px' }}
+        >
+          Stop
+        </button>
+      )}
 
-      <div style={{ marginBottom: '20px' }}>
-        {!isListening ? (
-          <button
-            onClick={startListening}
-            style={{ padding: '10px 20px', fontSize: '16px', cursor: 'pointer' }}
-          >
-            Start Mic
-          </button>
-        ) : (
-          <button
-            onClick={stopListening}
-            style={{ padding: '10px 20px', fontSize: '16px', cursor: 'pointer', backgroundColor: '#ffcccc' }}
-          >
-            Stop Mic
-          </button>
-        )}
+      {/* Volume Bar */}
+      <div style={{ margin: '30px auto', width: '300px', height: '10px', background: '#e0e0e0', borderRadius: '5px', overflow: 'hidden' }}>
+        <div style={{ 
+          width: `${Math.min(volume * 1000, 100)}%`, 
+          height: '100%', 
+          background: '#28a745',
+          transition: 'width 0.1s linear'
+        }} />
       </div>
 
-      <div style={{ border: '1px solid #ccc', padding: '10px', minHeight: '100px', width: '300px' }}>
-        <strong>Detected Notes:</strong>
-        <ul style={{ listStyleType: 'none', padding: 0 }}>
-          {notes.slice(-10).map((n, i) => (
-            <li key={i} style={{ color: n.type === 'ON' ? 'green' : 'red' }}>
-              {n.type}: <b>{n.note}</b>
-            </li>
-          ))}
-        </ul>
+      {/* Note Display */}
+      <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', marginTop: '40px', minHeight: '100px' }}>
+        {activeNotes.map(note => (
+          <div key={note} style={{ 
+            width: '80px', height: '80px', 
+            background: '#ffc107', 
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '24px', fontWeight: 'bold', borderRadius: '10px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+          }}>
+            {note}
+          </div>
+        ))}
       </div>
     </div>
   );
