@@ -1,3 +1,5 @@
+//bpmcontrol.tsx
+
 import React from 'react';
 import { useScoreStore } from '../../store/scoreStore';
 

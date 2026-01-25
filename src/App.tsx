@@ -4,10 +4,8 @@ import { useScoreStore } from './store/scoreStore';
 import './App.css';
 import { exportToPDF } from './utils/exportPDF';
 import { BpmControl } from './components/Controls/BpmControl';
+import { RecordButton } from './components/Controls/RecordButton'; // Import the new button
 import { useMetronome } from './hooks/useMetronome';
-
-// 1. Import your new component
-import AudioTranscriber from './components/Audio/AudioTranscriber'; 
 
 function App() {
   // Activate the Logic Engine (Keyboard listeners)
@@ -22,6 +20,9 @@ function App() {
       <header className="header">
         <h1>Drum Transcriber</h1>
         <div className="controls">
+          {/* New Record Button placed here */}
+          <RecordButton />
+          
           <BpmControl />
           
           <button 
@@ -40,11 +41,7 @@ function App() {
       </header>
 
       <main className="main-content">
-        {/* 2. Place the AudioTranscriber here */}
-        <div style={{ marginBottom: '20px' }}>
-            <AudioTranscriber />
-        </div>
-
+        {/* Removed the old AudioTranscriber div */}
         <SheetMusic />
       </main>
     </div>
