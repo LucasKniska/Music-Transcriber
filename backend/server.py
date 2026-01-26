@@ -35,7 +35,7 @@ async def audio_handler(websocket):
     
     audio_buffer = np.zeros((1, WINDOW_LENGTH, 1), dtype=np.float32)
     input_accumulator = []
-    active_notes = {} # midi_num -> abs_start_time
+    active_notes = {} 
     
     session_start_time = None
     recorded_song = []
@@ -60,7 +60,6 @@ async def audio_handler(websocket):
             volume = float(np.sqrt(np.mean(new_data**2)))
             await websocket.send(json.dumps({"type": "volume", "value": volume}))
             
-            # --- SILENCE HANDLER ---
             if volume < MIN_VOLUME:
                 if active_notes:
                     now = time.time()
@@ -86,23 +85,31 @@ async def audio_handler(websocket):
             current_notes_max = np.max(note_probs[0, -focus:, :], axis=0)
             current_onsets_max = np.max(onset_probs[0, -focus:, :], axis=0)
 
-            # --- BUG FIX 4: SUB-HARMONIC SUPPRESSION ---
-            # We iterate high-to-low. If a high note is strong, we squelch its
-            # specific lower octaves (sub-harmonics) unless they are also very strong.
-            # This prevents a G4 from triggering a ghost G2.
-            for i in range(87, 24, -1): # Check all notes down to C3
-                prob_high = current_notes_max[i]
+            # --- UPDATED SUPPRESSION LOGIC ---
+            # We iterate High -> Low.
+            for i in range(87, 24, -1): 
+                prob = current_notes_max[i]
+                if prob < 0.1: continue 
 
-                if prob_high > 0.5: # If we definitely have a high note
-                    # Check 1 Octave down (i-12) and 2 Octaves down (i-24)
-                    for offset in [12, 24]:
+                # CHECK 1: AM I AN OVERTONE? (The "B5 Ghost" Fix)
+                # If the octave BELOW me (i-12) is significantly stronger, 
+                # then I (the high note) am just a harmonic shadow. Kill me.
+                idx_below = i - 12
+                if idx_below >= 0:
+                    prob_below = current_notes_max[idx_below]
+                    # If Low Note is strong (0.5+) AND Low Note is stronger than me
+                    if prob_below > 0.5 and prob < prob_below:
+                        current_notes_max[i] = 0.0
+                        continue # Stop processing this note, it's dead.
+
+                # CHECK 2: AM I CAUSING GHOSTS? (The "G2 Ghost" Fix)
+                # If I am the strong note, kill the weak sub-harmonics below me.
+                if prob > 0.5: 
+                    for offset in [12, 19]: 
                         low_idx = i - offset
                         if low_idx >= 0:
                             prob_low = current_notes_max[low_idx]
-                            
-                            # If the low note is just a "shadow" (weaker than the high note), kill it.
-                            # We use a 0.8 factor: if real G2 was playing, it should be loud on its own.
-                            if prob_low < (prob_high * 0.9): 
+                            if prob_low < (prob * 0.9): 
                                 current_notes_max[low_idx] = 0.0
 
             
@@ -114,16 +121,10 @@ async def audio_handler(websocket):
                 prob_note = current_notes_max[i]
                 prob_onset = current_onsets_max[i]
                 
-                # --- DYNAMIC LOW-FREQUENCY BIAS ---
+                # Standard Hysteresis...
                 start_thresh = NOTE_START_THRESHOLD
                 onset_thresh = ONSET_THRESHOLD
                 
-                # If note is below C3 (MIDI 48), lower the threshold by 30%
-                if midi_num < 48:
-                    start_thresh *= 0.7
-                    onset_thresh *= 0.7
-
-                # Check thresholds using Hysteresis
                 is_active = midi_num in active_notes
                 thresh = NOTE_KEEP_THRESHOLD if is_active else start_thresh
                 
