@@ -7,8 +7,6 @@ from basic_pitch.inference import Model, ICASSP_2022_MODEL_PATH
 
 # --- CONFIGURATION ---
 SAMPLE_RATE = 22050
-# CHANGED: Reduced from 2048 to 768. 
-# This checks for notes every ~35ms instead of ~93ms, making attacks feel much snappier.
 HOP_SIZE = 768          
 WINDOW_LENGTH = 43844   
 
@@ -84,10 +82,29 @@ async def audio_handler(websocket):
             onset_probs = output['onset']
             if note_probs is None: continue
 
-            # Larger focus window to smooth out jitters
             focus = 8
             current_notes_max = np.max(note_probs[0, -focus:, :], axis=0)
             current_onsets_max = np.max(onset_probs[0, -focus:, :], axis=0)
+
+            # --- BUG FIX 4: SUB-HARMONIC SUPPRESSION ---
+            # We iterate high-to-low. If a high note is strong, we squelch its
+            # specific lower octaves (sub-harmonics) unless they are also very strong.
+            # This prevents a G4 from triggering a ghost G2.
+            for i in range(87, 24, -1): # Check all notes down to C3
+                prob_high = current_notes_max[i]
+
+                if prob_high > 0.5: # If we definitely have a high note
+                    # Check 1 Octave down (i-12) and 2 Octaves down (i-24)
+                    for offset in [12, 24]:
+                        low_idx = i - offset
+                        if low_idx >= 0:
+                            prob_low = current_notes_max[low_idx]
+                            
+                            # If the low note is just a "shadow" (weaker than the high note), kill it.
+                            # We use a 0.8 factor: if real G2 was playing, it should be loud on its own.
+                            if prob_low < (prob_high * 0.9): 
+                                current_notes_max[low_idx] = 0.0
+
             
             now = time.time()
             detected_this_frame = set()
@@ -97,20 +114,17 @@ async def audio_handler(websocket):
                 prob_note = current_notes_max[i]
                 prob_onset = current_onsets_max[i]
                 
-                # --- CHANGED: DYNAMIC LOW-FREQUENCY BIAS ---
+                # --- DYNAMIC LOW-FREQUENCY BIAS ---
                 start_thresh = NOTE_START_THRESHOLD
                 onset_thresh = ONSET_THRESHOLD
                 
                 # If note is below C3 (MIDI 48), lower the threshold by 30%
-                # This fixes the issue where low notes require "holding" to trigger.
                 if midi_num < 48:
                     start_thresh *= 0.7
                     onset_thresh *= 0.7
 
                 # Check thresholds using Hysteresis
                 is_active = midi_num in active_notes
-                
-                # If active, use the keep threshold (standard), otherwise use dynamic start
                 thresh = NOTE_KEEP_THRESHOLD if is_active else start_thresh
                 
                 is_sustaining = prob_note > thresh
@@ -119,22 +133,16 @@ async def audio_handler(websocket):
                 if is_sustaining:
                     detected_this_frame.add(midi_num)
                     
-                    # LOGIC: Re-trigger or New Note
                     if is_active:
-                        # Only re-trigger if enough time has passed (Prevents double-triggering)
                         if is_attack and (now - active_notes[midi_num]) > RETRIGGER_COOLDOWN:
-                            # Close previous instance
                             old_start = active_notes[midi_num]
                             recorded_song.append({"note": midi_to_note_name(midi_num), "midi": midi_num, "start_time": round(old_start - session_start_time, 3), "duration": round(now - old_start, 3)})
-                            
-                            # Start new instance
                             active_notes[midi_num] = now
                             await websocket.send(json.dumps({
                                 "type": "note_on", "note": midi_to_note_name(midi_num), "midi": midi_num,
                                 "event": "re_trigger", "start_time": round(now - session_start_time, 3)
                             }))
                     else:
-                        # Initial Note On
                         if session_start_time is None: session_start_time = now
                         active_notes[midi_num] = now
                         await websocket.send(json.dumps({
@@ -142,7 +150,7 @@ async def audio_handler(websocket):
                             "event": "new_attack", "start_time": round(now - session_start_time, 3)
                         }))
 
-            # --- CLEANUP: NATURAL NOTE OFF ---
+            # --- CLEANUP ---
             for midi_num in list(active_notes.keys()):
                 if midi_num not in detected_this_frame:
                     start_time = active_notes[midi_num]
