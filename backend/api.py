@@ -3,13 +3,15 @@ from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-# from lilypond import convert_to_lilypond 
+
+# Import the new function from lilypond.py
+from lilypond import convert_to_lilypond 
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"], # Adjust if your frontend port differs
+    allow_origins=["http://localhost:5173"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -21,8 +23,8 @@ class Note(BaseModel):
     id: str
     keys: List[str]          
     duration: str            
-    rawDuration: float       
-    startTimeOffset: float   
+    rawDuration: Optional[float] = 0.0
+    startTimeOffset: Optional[float] = 0.0
     isRest: bool
     color: Optional[str] = "black"
 
@@ -48,7 +50,6 @@ async def save_session(session: SessionPayload):
 @app.get("/api/notes")
 async def get_latest_notes():
     if current_session:
-        print(f"📤 Sending back {len(current_session.notes)} notes from saved session.")
         return current_session.notes
     return []
 
@@ -59,17 +60,19 @@ async def clear_session():
     print("🗑️ Session cleared.")
     return {"message": "Session cleared"}
 
-# @app.get("/api/export")
-# async def export_pdf():
-#     if not current_session or not current_session.notes:
-#         return Response(content="No notes to export", status_code=400)
+@app.get("/api/export")
+async def export_pdf():
+    # Check if we have data to export
+    if not current_session or not current_session.notes:
+        return Response(content="No notes to export. Please Save Session first.", status_code=400)
 
-#     pdf_bytes, error = await convert_to_lilypond(current_session.notes) 
+    print("📄 Generating PDF...")
+    pdf_bytes, error = await convert_to_lilypond(current_session.notes) 
     
-#     if error:
-#         return Response(content=error, status_code=500)
+    if error:
+        return Response(content=error, status_code=500)
         
-#     return Response(content=pdf_bytes, media_type="application/pdf")
+    return Response(content=pdf_bytes, media_type="application/pdf")
 
 # --- Run Server ---
 if __name__ == "__main__":

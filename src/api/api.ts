@@ -26,6 +26,7 @@ export const fetchNotes = async (): Promise<RenderedNote[]> => {
 export const saveSession = async (sessionData: SessionPayload) => {
   // Post the entire object to your backend
   const response = await apiClient.post('/sessions', sessionData);
+  console.log(response.data);
   return response.data;
 };
 
