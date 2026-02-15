@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type { RenderedNote, SessionPayload } from '../types'; // Import new type
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'http://3.94.194.252:5000/api';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
