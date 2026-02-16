@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type { RenderedNote, SessionPayload } from '../types'; // Import new type
 
-const API_BASE_URL = 'https://2qdhngqnu3.execute-api.us-east-1.amazonaws.com/prod.api';
+const API_BASE_URL = 'https://2qdhngqnu3.execute-api.us-east-1.amazonaws.com/prod/api';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
