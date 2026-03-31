@@ -27,6 +27,12 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# --- SSL Certificates ---
+backend/certs/
+*.pem
+*.key
+*.crt
+
 # --- System Files ---
 .DS_Store
 Thumbs.db

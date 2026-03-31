@@ -45,7 +45,9 @@ export const SheetMusic: React.FC = () => {
   const { notes, activeNotes, bpm, loadNotesFromBackend, forceRenderTick } = useScoreStore();
 
   useEffect(() => {
-    loadNotesFromBackend();
+    if (notes.length === 0) {
+      loadNotesFromBackend();
+    }
   }, [loadNotesFromBackend]);
 
   useEffect(() => {

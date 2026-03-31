@@ -10,9 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "22": "^0.0.0",
+    "@supabase/supabase-js": "^2.101.0",
+    "@types/react-router-dom": "^5.3.3",
     "axios": "^1.13.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-router-dom": "^7.13.2",
     "uuid": "^13.0.0",
     "vexflow": "^5.0.0",
     "zustand": "^5.0.9"

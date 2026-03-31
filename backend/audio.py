@@ -1,9 +1,16 @@
 import asyncio
+import logging
 import websockets
 import json
 import time
 import numpy as np
+
+# basic_pitch checks for optional backends (TF, ONNX, CoreML) at import time and
+# warns if they're absent. tflite-runtime is the active backend so these are noise.
+_root_level = logging.getLogger().level
+logging.getLogger().setLevel(logging.ERROR)
 from basic_pitch.inference import Model, ICASSP_2022_MODEL_PATH
+logging.getLogger().setLevel(_root_level)
 
 # --- CONFIGURATION ---
 SAMPLE_RATE = 22050
@@ -199,7 +206,7 @@ async def audio_handler(websocket):
 
 async def main():
     print("Server running on localhost:8000")
-    async with websockets.serve(audio_handler, "localhost", 8000):
+    async with websockets.serve(audio_handler, "0.0.0.0", 8000):
         await asyncio.Future()
 
 if __name__ == "__main__":

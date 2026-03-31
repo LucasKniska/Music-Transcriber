@@ -12,8 +12,8 @@ class AudioProcessor extends AudioWorkletProcessor {
       // We copy it to ensure the memory isn't detached before sending
       const outputData = new Float32Array(input[0]);
       
-      // Post raw audio data to the main thread
-      this.port.postMessage(outputData);
+      // Post as binary ArrayBuffer so the backend can np.frombuffer(message, dtype=np.float32)
+      this.port.postMessage(outputData.buffer, [outputData.buffer]);
     }
     return true; // Keep processor alive
   }

@@ -20,3 +20,13 @@ export interface SessionPayload {
   notes: RenderedNote[];
   createdAt: string;
 }
+
+export interface Sheet {
+  id: string;
+  user_id: string;
+  title: string;
+  bpm: number;
+  notes: RenderedNote[];
+  created_at: string;
+  updated_at: string;
+}
