@@ -54,7 +54,7 @@ const AuthPage: React.FC = () => {
         boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
       }}>
         <h1 style={{ margin: '0 0 0.25rem', fontSize: '1.5rem', color: '#111827' }}>
-          Music Transcriber
+          Score AI
         </h1>
         <p style={{ margin: '0 0 1.5rem', color: '#6b7280', fontSize: '0.875rem' }}>
           {isSignUp ? 'Create your account' : 'Sign in to your account'}

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Renderer, Stave, Voice, Formatter } from 'vexflow';
+import { Renderer, Stave, StaveNote, Voice, Formatter } from 'vexflow';
 import { useScoreStore, formatToVexKey } from '../../store/scoreStore';
 import { convertToVexNotes } from '../../utils/VexMap';
 import { quantizeDuration } from '../../utils/musicMath'; // Keep quantize, but we will count beats locally
@@ -41,6 +41,9 @@ export const SheetMusic: React.FC = () => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<HTMLDivElement>(null);
   const bottomAnchorRef = useRef<HTMLDivElement>(null);
+  // Cache VexFlow StaveNote arrays for completed (non-active) measures to avoid
+  // recreating expensive objects on every 100ms active-note tick.
+  const vexNoteCache = useRef<Map<string, StaveNote[]>>(new Map());
 
   const { notes, activeNotes, bpm, loadNotesFromBackend, forceRenderTick } = useScoreStore();
 
@@ -128,7 +131,14 @@ export const SheetMusic: React.FC = () => {
 
       // 1. Prepare Voice & Calculate Note Width
       if (measureNotes && measureNotes.length > 0) {
-        const vexNotes = convertToVexNotes(measureNotes);
+        // Use cache for fully-completed measures (no active/temp notes)
+        const isStable = measureNotes.every((n) => !n.id.startsWith('temp-'));
+        const cacheKey = isStable ? measureNotes.map((n) => n.id).join(',') : '';
+        let vexNotes = isStable ? vexNoteCache.current.get(cacheKey) : undefined;
+        if (!vexNotes) {
+          vexNotes = convertToVexNotes(measureNotes);
+          if (isStable) vexNoteCache.current.set(cacheKey, vexNotes);
+        }
         voice = new Voice({ numBeats: BEATS_PER_MEASURE, beatValue: 4 });
         voice.setStrict(false);
         voice.addTickables(vexNotes);

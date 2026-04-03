@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { SheetMusic } from './components/Canvas/SheetMusic';
 import { useScoreStore } from './store/scoreStore';
@@ -6,6 +6,7 @@ import './App.css';
 import { exportToPDF } from './utils/exportPDF';
 import { BpmControl } from './components/Controls/BpmControl';
 import { RecordButton } from './components/Controls/RecordButton';
+import { PitchIndicator } from './components/Controls/PitchIndicator';
 import { useMetronome } from './hooks/useMetronome';
 import { BTN_ACCENT_BG, BTN_ACCENT_HOVER } from './constants/theme';
 
@@ -26,9 +27,9 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleRecordingStopped = () => {
+  const handleRecordingStopped = useCallback(() => {
     setReadyToSave(true);
-  };
+  }, []);
 
   const handleSave = async () => {
     if (notes.length === 0) return;
@@ -75,6 +76,8 @@ function App() {
 
         <div className="controls">
           <RecordButton onRecordingStopped={handleRecordingStopped} />
+          <RecordButton mode="monitor" />
+          <PitchIndicator />
           <BpmControl />
           <button className="btn-danger" onClick={handleClear}>
             Clear Sheet

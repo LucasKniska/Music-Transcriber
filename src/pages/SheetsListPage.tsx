@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { Sheet } from '../types';
-import { BTN_ACCENT_BG, BTN_ACCENT_HOVER } from '../constants/theme';
+
 
 /* ─── Inline SVGs ─────────────────────────────────────────────────────────── */
 

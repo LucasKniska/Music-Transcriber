@@ -6,16 +6,24 @@ import time
 import numpy as np
 
 # basic_pitch checks for optional backends (TF, ONNX, CoreML) at import time and
-# warns if they're absent. tflite-runtime is the active backend so these are noise.
+# warns if they're absent. Suppress noise, then try ONNX → fallback to default.
 _root_level = logging.getLogger().level
 logging.getLogger().setLevel(logging.ERROR)
-from basic_pitch.inference import Model, ICASSP_2022_MODEL_PATH
-logging.getLogger().setLevel(_root_level)
+try:
+    from basic_pitch.inference import Model, ICASSP_2022_MODEL_PATH, InferenceType
+    model = Model(ICASSP_2022_MODEL_PATH, inference_type=InferenceType.ONNX)
+    logging.getLogger().setLevel(_root_level)
+    print("Using ONNX inference backend.")
+except (ImportError, AttributeError, Exception):
+    from basic_pitch.inference import Model, ICASSP_2022_MODEL_PATH
+    logging.getLogger().setLevel(_root_level)
+    model = Model(ICASSP_2022_MODEL_PATH)
+    print("Using default inference backend.")
 
 # --- CONFIGURATION ---
 SAMPLE_RATE = 22050
 HOP_SIZE = 768
-WINDOW_LENGTH = 43844
+WINDOW_LENGTH = 22050  # ~1s context window (was 43844 ~2s) — faster inference
 
 # --- HYSTERESIS THRESHOLDS ---
 ONSET_THRESHOLD = 0.6          # Sensitivity for starting a NEW note from silence
@@ -27,10 +35,11 @@ MIN_VOLUME = 0.001
 # --- COOLDOWN ---
 RETRIGGER_COOLDOWN = 0.12
 
+# --- SILENCE GRACE PERIOD ---
+SILENCE_GRACE_FRAMES = 3  # consecutive silent frames before cutting notes (~105ms)
+
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
-print("Loading Basic Pitch Model...")
-model = Model(ICASSP_2022_MODEL_PATH)
 print("Model Loaded. Ready.")
 
 def midi_to_note_name(midi_number):
@@ -43,8 +52,9 @@ async def audio_handler(websocket):
     
     audio_buffer = np.zeros((1, WINDOW_LENGTH, 1), dtype=np.float32)
     input_accumulator = []
-    active_notes = {} 
-    
+    active_notes = {}
+    silence_grace_count = 0
+
     session_start_time = None
     recorded_song = []
 
@@ -68,9 +78,10 @@ async def audio_handler(websocket):
             volume = float(np.sqrt(np.mean(new_data**2)))
             await websocket.send(json.dumps({"type": "volume", "value": volume}))
             
-            # --- SILENCE HANDLING ---
+            # --- SILENCE HANDLING (with grace period) ---
             if volume < MIN_VOLUME:
-                if active_notes:
+                silence_grace_count += 1
+                if silence_grace_count >= SILENCE_GRACE_FRAMES and active_notes:
                     now = time.time()
                     for midi_num, start in active_notes.items():
                         rel_start = start - session_start_time
@@ -81,6 +92,8 @@ async def audio_handler(websocket):
                     active_notes = {}
                     await websocket.send(json.dumps({"type": "silence_reset"}))
                 continue
+            else:
+                silence_grace_count = 0
 
             # --- AI PROCESSING ---
             loop = asyncio.get_running_loop()
@@ -90,7 +103,7 @@ async def audio_handler(websocket):
             onset_probs = output['onset']
             if note_probs is None: continue
 
-            focus = 8
+            focus = 5  # was 8 (~280ms) → now ~174ms
             current_notes_max = np.max(note_probs[0, -focus:, :], axis=0)
             current_onsets_max = np.max(onset_probs[0, -focus:, :], axis=0)
 

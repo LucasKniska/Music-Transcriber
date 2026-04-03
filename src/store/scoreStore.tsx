@@ -12,19 +12,21 @@ interface ActiveNoteData {
 }
 
 interface ScoreState {
-  notes: RenderedNote[];          
-  activeNotes: Map<number, ActiveNoteData>; 
-  bpm: number;                         
-  isMetronomeOn: boolean;             
-  
-  setBpm: (newBpm: number) => void;   
+  notes: RenderedNote[];
+  activeNotes: Map<number, ActiveNoteData>;
+  bpm: number;
+  isMetronomeOn: boolean;
+  currentPitch: string | null;
+
+  setBpm: (newBpm: number) => void;
   clearScore: () => void;
   loadNotesFromBackend: () => Promise<void>;
   toggleMetronome: () => void;
   handleNoteOn: (midi: number, noteName: string) => void;
   handleNoteOff: (midi: number) => void;
   forceRenderTick: () => void;
-  
+  setCurrentPitch: (note: string | null) => void;
+
   // NEW ACTIONS
   saveRecording: (title: string) => Promise<string | null>;
   loadSheet: (notes: RenderedNote[], bpm: number) => void;
@@ -41,17 +43,19 @@ export const useScoreStore = create<ScoreState>()(
   persist(
     (set, get) => ({
       notes: [],
-      activeNotes: new Map(), 
-      bpm: 100, 
+      activeNotes: new Map(),
+      bpm: 100,
       isMetronomeOn: false,
+      currentPitch: null,
 
       setBpm: (newBpm) => set({ bpm: newBpm }),
+      setCurrentPitch: (note) => set({ currentPitch: note }),
 
       handleNoteOn: (midi, noteName) => {
         const { activeNotes } = get();
         const newActive = new Map(activeNotes);
         newActive.set(midi, { startTime: Date.now() / 1000, noteName, midi });
-        set({ activeNotes: newActive });
+        set({ activeNotes: newActive, currentPitch: noteName });
       },
 
       handleNoteOff: (midi) => {
@@ -79,10 +83,11 @@ export const useScoreStore = create<ScoreState>()(
 
           const newActive = new Map(activeNotes);
           newActive.delete(midi);
-          
-          set({ 
+
+          set({
             activeNotes: newActive,
-            notes: [...notes, newNote]
+            notes: [...notes, newNote],
+            currentPitch: newActive.size > 0 ? get().currentPitch : null,
           });
           // Zustand Persist auto-saves to LocalStorage here!
         }

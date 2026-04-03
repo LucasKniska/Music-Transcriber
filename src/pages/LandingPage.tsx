@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
 /* ─── Animated Waveform ───────────────────────────────────────────────────── */
@@ -92,8 +92,6 @@ const StarIcon = () => (
 /* ─── Main Component ──────────────────────────────────────────────────────── */
 
 const LandingPage: React.FC = () => {
-  const scrolled = useRef(false);
-
   useEffect(() => {
     const nav = document.getElementById('landing-nav');
     const onScroll = () => {
