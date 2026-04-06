@@ -25,6 +25,8 @@ export const RecordButton: React.FC<Props> = ({ onRecordingStopped, mode = 'reco
   const socketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
 
@@ -32,11 +34,23 @@ export const RecordButton: React.FC<Props> = ({ onRecordingStopped, mode = 'reco
   useEffect(() => { onRecordingStoppedRef.current = onRecordingStopped; }, [onRecordingStopped]);
 
   const stopAudio = useCallback(() => {
+    console.log(`[RecordButton:${mode}] stopAudio called`);
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
     setElapsed(0);
+
+    if (workletNodeRef.current) {
+      workletNodeRef.current.port.onmessage = null;
+      workletNodeRef.current.disconnect();
+      workletNodeRef.current = null;
+    }
+
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
+    }
 
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
@@ -75,15 +89,31 @@ export const RecordButton: React.FC<Props> = ({ onRecordingStopped, mode = 'reco
   }, [mode, handleNoteOn, handleNoteOff, setCurrentPitch]);
 
   const startStreaming = async () => {
+    console.log(`[RecordButton:${mode}] startStreaming called`);
+
+    const audioContext = new window.AudioContext({ sampleRate: 22050 });
+    audioContextRef.current = audioContext;
+    console.log(`[RecordButton:${mode}] AudioContext created, state=${audioContext.state}`);
+    await audioContext.resume();
+    console.log(`[RecordButton:${mode}] AudioContext after resume, state=${audioContext.state}`);
+
     const socket = new WebSocket(`wss://${window.location.hostname}/ws`);
     socketRef.current = socket;
+    console.log(`[RecordButton:${mode}] WebSocket created, readyState=${socket.readyState}`);
 
     socket.onopen = async () => {
+      console.log(`[RecordButton:${mode}] WebSocket opened`);
       setIsRecording(true);
       startTimeRef.current = Date.now();
 
       timerRef.current = setInterval(() => {
         setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
+      }, 1000);
+
+      // Poll AudioContext state every second to catch unexpected suspension
+      const ctxWatchdog = setInterval(() => {
+        if (!audioContextRef.current) { clearInterval(ctxWatchdog); return; }
+        console.log(`[RecordButton:${mode}] AudioContext state=${audioContextRef.current.state}`);
       }, 1000);
 
       try {
@@ -95,25 +125,35 @@ export const RecordButton: React.FC<Props> = ({ onRecordingStopped, mode = 'reco
             channelCount: 1,
           },
         });
+        console.log(`[RecordButton:${mode}] getUserMedia OK, tracks=${stream.getTracks().length}`);
         streamRef.current = stream;
 
-        const audioContext = new window.AudioContext({ sampleRate: 22050 });
-        audioContextRef.current = audioContext;
         await audioContext.audioWorklet.addModule('/audioProcessor.js');
+        console.log(`[RecordButton:${mode}] AudioWorklet module loaded`);
 
         const source = audioContext.createMediaStreamSource(stream);
         const workletNode = new AudioWorkletNode(audioContext, 'audio-processor');
 
+        sourceRef.current = source;
+        workletNodeRef.current = workletNode;
+
+        let frameCount = 0;
         workletNode.port.onmessage = (event) => {
+          frameCount++;
+          if (frameCount === 1) console.log(`[RecordButton:${mode}] First audio frame received from worklet`);
+          if (frameCount % 500 === 0) console.log(`[RecordButton:${mode}] Audio frames sent: ${frameCount}`);
           if (socketRef.current?.readyState === WebSocket.OPEN) {
             socketRef.current.send(event.data);
+          } else {
+            if (frameCount % 100 === 0) console.warn(`[RecordButton:${mode}] Socket not OPEN (state=${socketRef.current?.readyState}), dropping frame`);
           }
         };
 
         source.connect(workletNode);
         workletNode.connect(audioContext.destination);
+        console.log(`[RecordButton:${mode}] Audio graph connected`);
       } catch (err) {
-        console.error('Audio setup failed:', err);
+        console.error(`[RecordButton:${mode}] Audio setup failed:`, err);
         stopAudio();
       }
     };
@@ -123,12 +163,18 @@ export const RecordButton: React.FC<Props> = ({ onRecordingStopped, mode = 'reco
         const data: NoteEvent = JSON.parse(event.data);
         handleServerEvent(data);
       } catch (e) {
-        console.error('JSON Parse Error', e);
+        console.error(`[RecordButton:${mode}] JSON Parse Error`, e);
       }
     };
 
-    socket.onerror = () => { stopAudio(); };
-    socket.onclose = () => { stopAudio(); };
+    socket.onerror = (e) => {
+      console.error(`[RecordButton:${mode}] WebSocket error`, e);
+      stopAudio();
+    };
+    socket.onclose = (e) => {
+      console.warn(`[RecordButton:${mode}] WebSocket closed, code=${e.code} reason="${e.reason}" wasClean=${e.wasClean}`);
+      stopAudio();
+    };
   };
 
   useEffect(() => {

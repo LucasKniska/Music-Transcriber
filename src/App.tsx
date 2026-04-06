@@ -113,6 +113,8 @@ function App() {
           {/* Editable title with pencil icon */}
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center', minWidth: 0, flex: 1, maxWidth: 360 }}>
             <input
+              id="recording-title"
+              name="recording-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onFocus={() => setTitleFocused(true)}
