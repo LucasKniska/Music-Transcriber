@@ -1,8 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { motion, useReducedMotion, useInView, type Variants } from 'framer-motion';
 
-/* ─── Animated Waveform ───────────────────────────────────────────────────── */
+/* ─── Motion(Link) wrapper ───────────────────────────────────────────────── */
+const MotionLink = motion.create(Link);
 
+/* ─── Wave path generator ────────────────────────────────────────────────── */
 function generateWavePath(
   cycles: number,
   segmentWidth: number,
@@ -22,45 +25,75 @@ function generateWavePath(
   return d;
 }
 
+/* ─── Animated Waveform ──────────────────────────────────────────────────── */
 const WaveformHero: React.FC = () => {
-  const W = 2800;
-  const H = 160;
-  const cy = H / 2;
-  const half = W / 2;
+  const rm = useReducedMotion();
+  const W = 2800, H = 160, cy = H / 2, half = W / 2;
 
   const makePath = (cycles: number, amplitude: number) =>
     generateWavePath(cycles, half, 0, cy, amplitude) +
     ' ' +
     generateWavePath(cycles, half, half, cy, amplitude);
 
-  const wave1 = makePath(10, 38);
-  const wave2 = makePath(10, 24);
-  const wave3 = makePath(14, 14);
+  const paths = [
+    { d: makePath(10, 38), strokeWidth: '3',   opacity: 0.18, delay: 0.6 },
+    { d: makePath(10, 24), strokeWidth: '2.5', opacity: 0.35, delay: 0.9 },
+    { d: makePath(14, 14), strokeWidth: '2',   opacity: 0.6,  delay: 1.2 },
+  ];
 
   return (
-    <div style={{ width: '100%', overflow: 'hidden', height: H, position: 'relative', marginTop: '2.5rem' }}>
+    // Wrapper handles the post-draw vertical breathing
+    <motion.div
+      style={{ width: '100%', overflow: 'hidden', height: H, position: 'relative', marginTop: '2.5rem' }}
+      animate={rm ? {} : { y: [0, -4, 0, 4, 0] }}
+      transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut', delay: 3.6, repeatType: 'loop' }}
+    >
       <svg
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
         style={{ width: '200%', height: '100%', display: 'block' }}
         className="waveform-svg"
       >
-        <path d={wave1} stroke="#F97316" strokeWidth="3" fill="none" opacity="0.18" />
-        <path d={wave2} stroke="#F97316" strokeWidth="2.5" fill="none" opacity="0.35" />
-        <path d={wave3} stroke="#F97316" strokeWidth="2" fill="none" opacity="0.6" />
+        {paths.map((p, i) => (
+          <motion.path
+            key={i}
+            d={p.d}
+            stroke="#F97316"
+            strokeWidth={p.strokeWidth}
+            fill="none"
+            opacity={p.opacity}
+            initial={rm ? false : { pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 1.8, delay: p.delay, ease: 'easeInOut' }}
+          />
+        ))}
       </svg>
-    </div>
+    </motion.div>
   );
 };
 
-/* ─── SVG Icons ───────────────────────────────────────────────────────────── */
+/* ─── Logo wave — path morphs between normal and inverted amplitude ───────── */
+const LogoWave: React.FC = () => {
+  const rm = useReducedMotion();
+  const d1 = 'M2 12 Q 5 6, 8 12 Q 11 18, 14 12 Q 17 6, 20 12 Q 22 15, 24 12';
+  const d2 = 'M2 12 Q 5 18, 8 12 Q 11 6, 14 12 Q 17 18, 20 12 Q 22 9, 24 12';
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="2.5" strokeLinecap="round">
+      <motion.path
+        d={d1}
+        animate={rm ? {} : { d: [d1, d2, d1] }}
+        transition={{ duration: 2, ease: 'easeInOut', repeat: Infinity }}
+      />
+    </svg>
+  );
+};
 
+/* ─── SVG Icons (unchanged) ──────────────────────────────────────────────── */
 const IconBolt = () => (
   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
   </svg>
 );
-
 const IconMusic = () => (
   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M9 18V5l12-2v13" />
@@ -68,7 +101,6 @@ const IconMusic = () => (
     <circle cx="18" cy="16" r="3" />
   </svg>
 );
-
 const IconGlobe = () => (
   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="10" />
@@ -76,35 +108,64 @@ const IconGlobe = () => (
     <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
   </svg>
 );
-
-const LogoWave = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="2.5" strokeLinecap="round">
-    <path d="M2 12 Q 5 6, 8 12 Q 11 18, 14 12 Q 17 6, 20 12 Q 22 15, 24 12" />
-  </svg>
-);
-
 const StarIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="#F97316" stroke="none">
     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
   </svg>
 );
 
-/* ─── Main Component ──────────────────────────────────────────────────────── */
-
+/* ─── Main Component ─────────────────────────────────────────────────────── */
 const LandingPage: React.FC = () => {
+  const rm = useReducedMotion();
+
+  // Scroll shadow on nav
   useEffect(() => {
     const nav = document.getElementById('landing-nav');
     const onScroll = () => {
       if (!nav) return;
-      if (window.scrollY > 10) {
-        nav.style.boxShadow = '0 2px 24px rgba(44,26,6,0.08)';
-      } else {
-        nav.style.boxShadow = 'none';
-      }
+      nav.style.boxShadow = window.scrollY > 10 ? '0 2px 24px rgba(44,26,6,0.08)' : 'none';
     };
     window.addEventListener('scroll', onScroll);
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  // Scroll-triggered refs
+  const cardsRef  = useRef<HTMLDivElement>(null);
+  const stepsRef  = useRef<HTMLDivElement>(null);
+  const proofRef  = useRef<HTMLElement>(null);
+  const ctaRef    = useRef<HTMLElement>(null);
+  const cardsInView = useInView(cardsRef,  { once: true, amount: 0.1 });
+  const stepsInView = useInView(stepsRef,  { once: true, amount: 0.1 });
+  const proofInView = useInView(proofRef,  { once: true, amount: 0.15 });
+  const ctaInView   = useInView(ctaRef,    { once: true, amount: 0.15 });
+
+  // Shared transition builders
+  const fadeUp = (delay = 0) => ({
+    initial:  rm ? { opacity: 1, y: 0 } : { opacity: 0, y: 30 },
+    animate:  { opacity: 1, y: 0 },
+    transition: rm
+      ? { duration: 0 }
+      : { duration: 0.7, delay, ease: [0.25, 0.1, 0.25, 1] as const },
+  });
+
+  const scrollFadeUp = (isInView: boolean, delay = 0) => ({
+    initial:  rm ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 },
+    animate:  isInView ? { opacity: 1, y: 0 } : {},
+    transition: rm
+      ? { duration: 0 }
+      : { duration: 0.6, delay, ease: [0.25, 0.1, 0.25, 1] as const },
+  });
+
+  // Card / step stagger variants
+  const staggerContainer: Variants = rm
+    ? { hidden: {}, visible: {} }
+    : { hidden: {}, visible: { transition: { staggerChildren: 0.1 } } };
+  const staggerItem: Variants = rm
+    ? { hidden: { opacity: 1, y: 0 }, visible: { opacity: 1, y: 0 } }
+    : {
+        hidden:  { opacity: 0, y: 40 },
+        visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.25, 0.1, 0.25, 1] as const } },
+      };
 
   return (
     <>
@@ -198,9 +259,7 @@ const LandingPage: React.FC = () => {
           transform: translateY(-1px) scale(1.03);
           box-shadow: 0 6px 20px rgba(249,115,22,0.38);
         }
-        .l-pill-btn:active {
-          transform: translateY(0) scale(0.99);
-        }
+        .l-pill-btn:active { transform: translateY(0) scale(0.99); }
 
         .l-pill-btn-lg {
           padding: 0.75rem 2rem;
@@ -210,6 +269,13 @@ const LandingPage: React.FC = () => {
         .l-pill-btn-lg:hover {
           transform: translateY(-2px) scale(1.04);
           box-shadow: 0 8px 28px rgba(249,115,22,0.42);
+        }
+
+        /* Framer Motion manages hero CTA hover — neutralize CSS hover */
+        .l-pill-btn-fm.l-pill-btn:hover,
+        .l-pill-btn-fm.l-pill-btn-lg:hover {
+          transform: none;
+          box-shadow: 0 4px 20px rgba(249,115,22,0.35);
         }
 
         .l-pill-btn-cream {
@@ -252,16 +318,18 @@ const LandingPage: React.FC = () => {
           padding: 0.3rem 0.9rem;
           margin-bottom: 1.75rem;
         }
+
+        /* Badge dot: scale 1→1.3→1, 1.6s loop per spec */
         .l-hero-badge-dot {
           width: 6px;
           height: 6px;
           border-radius: 50%;
           background: #F97316;
-          animation: badge-pulse 2s ease-in-out infinite;
+          animation: badge-pulse 1.6s ease-in-out infinite;
         }
         @keyframes badge-pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.5; transform: scale(0.7); }
+          0%, 100% { transform: scale(1); }
+          50%       { transform: scale(1.3); }
         }
 
         .l-hero-h1 {
@@ -302,13 +370,36 @@ const LandingPage: React.FC = () => {
           margin-top: 0.75rem;
         }
 
-        /* Waveform animation */
+        /* Waveform horizontal scroll (CSS — off JS thread) */
         .waveform-svg {
-          animation: wave-flow 14s linear infinite;
+          animation: wave-flow 28s linear infinite;
         }
         @keyframes wave-flow {
           from { transform: translateX(0); }
-          to { transform: translateX(-50%); }
+          to   { transform: translateX(-50%); }
+        }
+
+        /* ── Floating notes — independent CSS individual transforms ──────── */
+        /*   note-y / note-rot run at different periods per note so they     */
+        /*   never sync, giving each note fully organic motion.              */
+        @keyframes note-y {
+          0%, 100% { translate: 0 0; }
+          50%       { translate: 0 -18px; }
+        }
+        @keyframes note-rot {
+          0%, 100% { rotate: -8deg; }
+          50%       { rotate:  8deg; }
+        }
+        @keyframes note-fade {
+          0%, 100% { opacity: 0.4; }
+          50%       { opacity: 0.7; }
+        }
+
+        .l-float-note {
+          position: absolute;
+          pointer-events: none;
+          color: #F97316;
+          user-select: none;
         }
 
         /* ── Features ── */
@@ -447,8 +538,63 @@ const LandingPage: React.FC = () => {
           margin-bottom: 2.5rem;
           position: relative;
         }
-        .l-cta-band-btn {
+        .l-cta-band-btn { position: relative; }
+
+        /* ── How it works strip ── */
+        .l-how {
+          background: #FDF6EC;
+          padding: 5rem 6vw;
+        }
+        .l-steps {
+          display: flex;
+          align-items: flex-start;
+          justify-content: center;
+          gap: 0;
+          max-width: 860px;
+          margin: 0 auto;
+          flex-wrap: wrap;
+        }
+        .l-step {
+          flex: 1;
+          min-width: 180px;
+          text-align: center;
+          padding: 0 1.5rem;
           position: relative;
+        }
+        .l-step:not(:last-child)::after {
+          content: '';
+          position: absolute;
+          top: 22px;
+          right: -1px;
+          width: 2px;
+          height: 24px;
+          background: linear-gradient(to bottom, rgba(249,115,22,0.2), transparent);
+        }
+        .l-step-num {
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, rgba(249,115,22,0.12), rgba(249,115,22,0.06));
+          border: 1.5px solid rgba(249,115,22,0.22);
+          color: #F97316;
+          font-weight: 800;
+          font-size: 1rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 0.875rem;
+        }
+        .l-step-title {
+          font-size: 0.95rem;
+          font-weight: 700;
+          color: #2C1A06;
+          margin-bottom: 0.35rem;
+        }
+        .l-step-body {
+          font-size: 0.85rem;
+          color: #92400E;
+          line-height: 1.55;
+          font-weight: 400;
         }
 
         /* ── Footer ── */
@@ -479,6 +625,14 @@ const LandingPage: React.FC = () => {
           color: #92400E;
           font-weight: 400;
         }
+
+        @media (prefers-reduced-motion: reduce) {
+          *, *::before, *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+          }
+        }
       `}</style>
 
       <div className="landing-root">
@@ -500,83 +654,229 @@ const LandingPage: React.FC = () => {
 
         {/* ── Hero ───────────────────────────────────────────────────────── */}
         <section className="l-hero">
-          <div className="l-hero-badge">
+
+          {/* Floating musical notes — 5 notes, each with 3 independent CSS
+              animations at different periods so they never fully synchronize */}
+          <span className="l-float-note" style={{
+            left: '6%', top: '22%', fontSize: '4rem',
+            animation: 'note-y 3.8s ease-in-out infinite, note-rot 4.2s ease-in-out infinite, note-fade 4.8s ease-in-out infinite',
+            animationDelay: '0s, 0.5s, 1.0s',
+          }}>♪</span>
+
+          <span className="l-float-note" style={{
+            right: '7%', top: '18%', fontSize: '3rem',
+            animation: 'note-y 5.2s ease-in-out infinite, note-rot 5.8s ease-in-out infinite, note-fade 5.6s ease-in-out infinite',
+            animationDelay: '0.8s, 1.3s, 0.3s',
+          }}>♩</span>
+
+          <span className="l-float-note" style={{
+            left: '12%', bottom: '30%', fontSize: '3.5rem',
+            animation: 'note-y 6.1s ease-in-out infinite, note-rot 6.7s ease-in-out infinite, note-fade 7.2s ease-in-out infinite',
+            animationDelay: '1.4s, 0.2s, 2.1s',
+          }}>♫</span>
+
+          <span className="l-float-note" style={{
+            right: '5%', bottom: '35%', fontSize: '2.5rem',
+            animation: 'note-y 4.5s ease-in-out infinite, note-rot 5.1s ease-in-out infinite, note-fade 5.1s ease-in-out infinite',
+            animationDelay: '2.2s, 1.8s, 0.7s',
+          }}>♬</span>
+
+          <span className="l-float-note" style={{
+            left: '28%', top: '12%', fontSize: '2rem',
+            animation: 'note-y 5.7s ease-in-out infinite, note-rot 6.3s ease-in-out infinite, note-fade 6.8s ease-in-out infinite',
+            animationDelay: '0.3s, 2.5s, 1.5s',
+          }}>♩</span>
+
+          {/* Badge — spring entrance + continuously pulsing dot (CSS) */}
+          <motion.div
+            className="l-hero-badge"
+            initial={rm ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.88 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 22, delay: rm ? 0 : 0.05 }}
+          >
             <span className="l-hero-badge-dot" />
             AI-Powered &nbsp;·&nbsp; Real Time
-          </div>
+          </motion.div>
 
+          {/* Headline — three word-groups animate independently */}
           <h1 className="l-hero-h1">
-            Live Music,<br /><em>Instantly</em> Readable.
+            <motion.span
+              style={{ display: 'inline' }}
+              {...fadeUp(0.15)}
+            >
+              Live Music,
+            </motion.span>
+            <br />
+            {/* "Instantly" additionally stretches in from scaleX 0.92 */}
+            <motion.em
+              style={{ display: 'inline-block' }}
+              initial={rm ? { opacity: 1, y: 0, scaleX: 1 } : { opacity: 0, y: 30, scaleX: 0.92 }}
+              animate={{ opacity: 1, y: 0, scaleX: 1 }}
+              transition={rm ? { duration: 0 } : { duration: 0.7, delay: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+            >
+              Instantly
+            </motion.em>
+            {' '}
+            <motion.span
+              style={{ display: 'inline' }}
+              {...fadeUp(0.4)}
+            >
+              Readable.
+            </motion.span>
           </h1>
 
-          <p className="l-hero-sub">
+          {/* Subtitle */}
+          <motion.p
+            className="l-hero-sub"
+            {...fadeUp(0.55)}
+          >
             Score AI listens to any live performance and turns it into
             beautiful sheet music in seconds — no setup, no delays, no limits.
-          </p>
+          </motion.p>
 
-          <div className="l-hero-cta-row">
-            <Link to="/login" className="l-pill-btn l-pill-btn-lg">
-              Get Started Free &rarr;
-            </Link>
-          </div>
+          {/* CTA — spring scale entrance; hover/tap managed by Framer Motion */}
+          <motion.div
+            className="l-hero-cta-row"
+            initial={rm ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 22, delay: rm ? 0 : 0.7 }}
+          >
+            <MotionLink
+              to="/login"
+              className="l-pill-btn l-pill-btn-lg l-pill-btn-fm"
+              initial="idle"
+              whileHover="hover"
+              whileTap="tap"
+              variants={{
+                idle: {},
+                hover: { y: -2, boxShadow: '0 8px 28px rgba(249,115,22,0.48)' },
+                tap:  { scale: 0.97 },
+              }}
+              transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+            >
+              Get Started Free{' '}
+              <motion.span
+                style={{ display: 'inline-block' }}
+                variants={{ idle: { x: 0 }, hover: { x: 4 } }}
+                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+              >
+                →
+              </motion.span>
+            </MotionLink>
+          </motion.div>
 
-          <p className="l-hero-note">No credit card required &nbsp;·&nbsp; Works in your browser</p>
+          <motion.p className="l-hero-note" {...fadeUp(0.82)}>
+            No credit card required &nbsp;·&nbsp; Works in your browser
+          </motion.p>
 
+          {/* Waveform — stroke draws in left→right, then breathes vertically */}
           <WaveformHero />
         </section>
 
         {/* ── Features ───────────────────────────────────────────────────── */}
         <section className="l-features">
-          <p className="l-section-label">What Score AI Does</p>
-          <h2 className="l-section-title">Everything a musician needs</h2>
-          <p className="l-section-sub">
-            From the first note to the final measure — Score AI handles the transcription so you can focus on the music.
-          </p>
+          <motion.div {...scrollFadeUp(cardsInView, 0)}>
+            <p className="l-section-label">What Score AI Does</p>
+            <h2 className="l-section-title">Everything a musician needs</h2>
+            <p className="l-section-sub">
+              From the first note to the final measure — Score AI handles the transcription so you can focus on the music.
+            </p>
+          </motion.div>
 
-          <div className="l-cards">
-            <div className="l-card">
+          {/* Cards stagger in as a group */}
+          <motion.div
+            ref={cardsRef}
+            className="l-cards"
+            variants={staggerContainer}
+            initial="hidden"
+            animate={cardsInView ? 'visible' : 'hidden'}
+          >
+            <motion.div className="l-card" variants={staggerItem}>
               <div className="l-card-icon"><IconBolt /></div>
               <div className="l-card-title">Real-Time Transcription</div>
               <p className="l-card-body">
                 Hear a note, see a note. Score AI processes audio live with zero perceptible delay, rendering notation as you perform.
               </p>
-            </div>
-            <div className="l-card">
+            </motion.div>
+            <motion.div className="l-card" variants={staggerItem}>
               <div className="l-card-icon"><IconMusic /></div>
               <div className="l-card-title">Any Instrument</div>
               <p className="l-card-body">
                 Piano, guitar, voice, or a full ensemble — our AI model recognizes pitch across the entire audible musical range.
               </p>
-            </div>
-            <div className="l-card">
+            </motion.div>
+            <motion.div className="l-card" variants={staggerItem}>
               <div className="l-card-icon"><IconGlobe /></div>
               <div className="l-card-title">Use It Anywhere</div>
               <p className="l-card-body">
-                Browser-based and cloud-powered. Open Score AI at rehearsal, on stage, in a classroom, or from the comfort of your home.
+                Browser-based and cloud-powered. Capture ideas at rehearsal, in the studio, in a classroom, or from the comfort of your home.
               </p>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
+        </section>
+
+        <div className="l-divider" />
+
+        {/* ── How It Works ───────────────────────────────────────────────── */}
+        <section className="l-how">
+          <motion.div {...scrollFadeUp(stepsInView, 0)}>
+            <p className="l-section-label">How It Works</p>
+            <h2 className="l-section-title">Three steps to sheet music</h2>
+            <p className="l-section-sub">No configuration. No training. Just play.</p>
+          </motion.div>
+
+          <motion.div
+            ref={stepsRef}
+            className="l-steps"
+            variants={staggerContainer}
+            initial="hidden"
+            animate={stepsInView ? 'visible' : 'hidden'}
+          >
+            <motion.div className="l-step" variants={staggerItem}>
+              <div className="l-step-num">1</div>
+              <div className="l-step-title">Open & Allow Mic</div>
+              <p className="l-step-body">One click grants microphone access. No downloads, no plugins — it works right in your browser.</p>
+            </motion.div>
+            <motion.div className="l-step" variants={staggerItem}>
+              <div className="l-step-num">2</div>
+              <div className="l-step-title">Play Your Instrument</div>
+              <p className="l-step-body">Our AI listens in real time and identifies every pitch the moment you play it.</p>
+            </motion.div>
+            <motion.div className="l-step" variants={staggerItem}>
+              <div className="l-step-num">3</div>
+              <div className="l-step-title">Save & Export</div>
+              <p className="l-step-body">Your performance becomes notation instantly. Save it to your library or export a clean PDF.</p>
+            </motion.div>
+          </motion.div>
         </section>
 
         <div className="l-divider" />
 
         {/* ── Social Proof ───────────────────────────────────────────────── */}
-        <section className="l-proof">
+        <motion.section
+          ref={proofRef}
+          className="l-proof"
+          {...scrollFadeUp(proofInView, 0)}
+        >
           <div className="l-stars">
             <StarIcon /><StarIcon /><StarIcon /><StarIcon /><StarIcon />
           </div>
-          <p className="l-proof-text">
-            Trusted by musicians, students, and music lovers worldwide
+          <p className="l-proof-text" style={{ maxWidth: 480, margin: '0 auto', fontStyle: 'italic', fontSize: '1.1rem', lineHeight: 1.65 }}>
+            "I played a melody I'd been humming for weeks and Score AI had it notated before I finished the phrase. It felt like magic."
           </p>
-          <p className="l-proof-sub">
-            From practice rooms to concert halls — Score AI travels with you.
+          <p className="l-proof-sub" style={{ marginTop: '0.875rem' }}>
+            — from the community &nbsp;·&nbsp; real-time transcription, every time
           </p>
-        </section>
+        </motion.section>
 
         <div className="l-divider" />
 
         {/* ── Closing CTA ────────────────────────────────────────────────── */}
-        <section className="l-cta-band">
+        <motion.section
+          ref={ctaRef}
+          className="l-cta-band"
+          {...scrollFadeUp(ctaInView, 0)}
+        >
           <h2 className="l-cta-band-h2">Ready to read the music?</h2>
           <p className="l-cta-band-sub">
             Start transcribing in seconds. Free forever for personal use.
@@ -586,7 +886,7 @@ const LandingPage: React.FC = () => {
               Sign Up Free &rarr;
             </Link>
           </div>
-        </section>
+        </motion.section>
 
         {/* ── Footer ─────────────────────────────────────────────────────── */}
         <footer className="l-footer">

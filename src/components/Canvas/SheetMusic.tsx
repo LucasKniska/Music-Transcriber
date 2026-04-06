@@ -212,10 +212,19 @@ export const SheetMusic: React.FC = () => {
   return (
     <div
       ref={scrollContainerRef}
-      className="p-4 bg-white border rounded shadow-md overflow-y-auto relative"
-      style={{ height: '400px', width: '100%' }}
+      style={{
+        flex: 1,
+        height: '100%',
+        width: '100%',
+        overflowY: 'auto',
+        position: 'relative',
+        background: '#FEFAF3',
+        border: '1px solid rgba(249,115,22,0.1)',
+        borderRadius: '0.75rem',
+        padding: '0.5rem',
+      }}
     >
-      <div ref={rendererRef} />
+      <div ref={rendererRef} data-sheet-svg="true" />
       <div ref={bottomAnchorRef} style={{ height: 1 }} />
     </div>
   );
