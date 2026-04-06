@@ -24,7 +24,8 @@ except (ImportError, AttributeError, Exception):
 # --- CONFIGURATION ---
 SAMPLE_RATE = 22050
 HOP_SIZE = 768
-WINDOW_LENGTH = 43844  # ~2s context window required by the compiled TFLite model
+WINDOW_LENGTH = 22050       # ~1s rolling audio buffer (faster response)
+MODEL_INPUT_LENGTH = 43844  # TFLite model fixed input shape — do not change
 
 # --- HYSTERESIS THRESHOLDS ---
 ONSET_THRESHOLD = 0.6          # Sensitivity for starting a NEW note from silence
@@ -37,7 +38,7 @@ MIN_VOLUME = 0.001
 RETRIGGER_COOLDOWN = 0.12
 
 # --- SILENCE GRACE PERIOD ---
-SILENCE_GRACE_FRAMES = 3  # consecutive silent frames before cutting notes (~105ms)
+SILENCE_GRACE_FRAMES = 10  # consecutive silent frames before cutting notes (~350ms)
 
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
@@ -105,8 +106,13 @@ async def audio_handler(websocket):
                     silence_grace_count = 0
 
                 # --- AI PROCESSING ---
+                # Pad the 1s rolling buffer to the model's fixed input length (43844)
+                # by prepending silence. The model sees context + recent audio.
+                pad_len = MODEL_INPUT_LENGTH - WINDOW_LENGTH
+                model_input = np.zeros((1, MODEL_INPUT_LENGTH, 1), dtype=np.float32)
+                model_input[0, pad_len:, 0] = audio_buffer[0, :, 0]
                 loop = asyncio.get_running_loop()
-                output = await loop.run_in_executor(None, lambda: model.predict(audio_buffer))
+                output = await loop.run_in_executor(None, lambda: model.predict(model_input))
 
                 note_probs = output['note']
                 onset_probs = output['onset']
