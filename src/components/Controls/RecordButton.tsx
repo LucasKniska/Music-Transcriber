@@ -20,7 +20,7 @@ export const RecordButton: React.FC<Props> = ({ onRecordingStopped, mode = 'reco
   const [isRecording, setIsRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
-  const { handleNoteOn, handleNoteOff, setCurrentPitch, bpm } = useScoreStore();
+  const { handleNoteOn, handleNoteOff, setCurrentPitch, setModelRunning, bpm } = useScoreStore();
 
   const socketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -69,6 +69,7 @@ export const RecordButton: React.FC<Props> = ({ onRecordingStopped, mode = 'reco
     }
 
     setIsRecording(false);
+    setModelRunning(false);
 
     setTimeout(() => {
       onRecordingStoppedRef.current?.();
@@ -104,6 +105,7 @@ export const RecordButton: React.FC<Props> = ({ onRecordingStopped, mode = 'reco
     socket.onopen = async () => {
       console.log(`[RecordButton:${mode}] WebSocket opened`);
       setIsRecording(true);
+      setModelRunning(true);
       startTimeRef.current = Date.now();
 
       timerRef.current = setInterval(() => {
@@ -159,9 +161,15 @@ export const RecordButton: React.FC<Props> = ({ onRecordingStopped, mode = 'reco
     };
 
     socket.onmessage = (event) => {
+      const t = performance.now();
       try {
         const data: NoteEvent = JSON.parse(event.data);
-        handleServerEvent(data);
+        if (data.type === 'note_on') {
+          handleServerEvent(data);
+          console.log(`[Latency] WS→store: ${(performance.now() - t).toFixed(1)}ms`);
+        } else {
+          handleServerEvent(data);
+        }
       } catch (e) {
         console.error(`[RecordButton:${mode}] JSON Parse Error`, e);
       }

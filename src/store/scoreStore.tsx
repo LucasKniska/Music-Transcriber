@@ -17,8 +17,10 @@ interface ScoreState {
   bpm: number;
   isMetronomeOn: boolean;
   currentPitch: string | null;
+  isModelRunning: boolean;
 
   setBpm: (newBpm: number) => void;
+  setModelRunning: (v: boolean) => void;
   clearScore: () => void;
   loadNotesFromBackend: () => Promise<void>;
   toggleMetronome: () => void;
@@ -47,9 +49,11 @@ export const useScoreStore = create<ScoreState>()(
       bpm: 100,
       isMetronomeOn: false,
       currentPitch: null,
+      isModelRunning: false,
 
       setBpm: (newBpm) => set({ bpm: newBpm }),
       setCurrentPitch: (note) => set({ currentPitch: note }),
+      setModelRunning: (v) => set({ isModelRunning: v }),
 
       handleNoteOn: (midi, noteName) => {
         const { activeNotes } = get();

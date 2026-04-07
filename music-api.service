@@ -1,0 +1,14 @@
+[Unit]
+Description=Music Transcriber REST API Server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Music-Transcriber/backend
+ExecStart=/home/ubuntu/Music-Transcriber/backend/.venv/bin/python -m uvicorn api:app --port 5000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

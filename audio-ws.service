@@ -1,0 +1,14 @@
+[Unit]
+Description=Music Transcriber Audio WebSocket Server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Music-Transcriber/backend
+ExecStart=/home/ubuntu/Music-Transcriber/backend/.venv/bin/python audio.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

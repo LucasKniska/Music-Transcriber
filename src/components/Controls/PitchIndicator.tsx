@@ -3,6 +3,7 @@ import { useScoreStore } from '../../store/scoreStore';
 
 export const PitchIndicator: React.FC = () => {
   const currentPitch = useScoreStore((s) => s.currentPitch);
+  const isModelRunning = useScoreStore((s) => s.isModelRunning);
 
   return (
     <>
@@ -40,7 +41,7 @@ export const PitchIndicator: React.FC = () => {
           animation: pitch-pop 0.18s cubic-bezier(0.22,1,0.36,1) both;
         }
       `}</style>
-      <div className={`pitch-indicator ${currentPitch ? 'active' : 'inactive'}`}>
+      <div className={`pitch-indicator ${(isModelRunning || currentPitch) ? 'active' : 'inactive'}`}>
         {currentPitch && (
           <span key={currentPitch} className="pitch-value">
             ♩ {currentPitch}
