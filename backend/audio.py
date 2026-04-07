@@ -7,7 +7,7 @@ from basic_pitch.inference import Model
 
 # --- CONFIGURATION ---
 SAMPLE_RATE = 22050
-HOP_SIZE = 768
+HOP_SIZE = 2048
 WINDOW_LENGTH = 43844
 
 # --- HYSTERESIS THRESHOLDS ---
@@ -18,7 +18,10 @@ NOTE_KEEP_THRESHOLD = 0.25
 MIN_VOLUME = 0.001
 
 # --- COOLDOWN ---
-RETRIGGER_COOLDOWN = 0.12
+RETRIGGER_COOLDOWN = 0.07
+
+# --- WARMUP ---
+WARMUP_HOPS = 0  # buffer is pre-filled with zeros at init, so no warmup needed
 
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
@@ -53,6 +56,7 @@ async def audio_handler(websocket):
     active_notes = {}
     recorded_song = []
     session_start_time = None
+    hops_received = 0
 
     try:
         async for message in websocket:
@@ -79,9 +83,12 @@ async def audio_handler(websocket):
                 volume = float(np.sqrt(np.mean(new_data ** 2)))
                 await websocket.send(json.dumps({"type": "volume", "value": volume}))
 
+                hops_received += 1
+                warmed_up = hops_received >= WARMUP_HOPS
+
                 # --- SILENCE HANDLING ---
                 if volume < MIN_VOLUME:
-                    if active_notes:
+                    if warmed_up and active_notes:
                         now = time.time()
                         if session_start_time is not None:
                             for midi_num, start in list(active_notes.items()):
@@ -132,6 +139,9 @@ async def audio_handler(websocket):
                                     current_notes_max[low_idx] = 0.0
 
                 now = time.time()
+                if not warmed_up:
+                    continue
+
                 detected_this_frame = set()
 
                 for i in range(88):
