@@ -1,87 +1,72 @@
-# 🥁 MIDI Drum Transcriber
+# Music Transcriber
 
-A full-stack application that listens to real-time MIDI input (electronic drums/keyboards) and automatically transcribes it into sheet music using VexFlow. The application features a React frontend for visualization and a Python/FastAPI backend for logic and persistence.
+A full-stack application that listens to your microphone in real-time and transcribes what you play into sheet music using AI. The frontend renders notation with VexFlow and the backend runs the Basic Pitch neural network model over a WebSocket stream.
 
-## 🚀 Features
+## Tech Stack
 
-* Real-time MIDI Transcription: Connect any MIDI device and see notes appear instantly.
-* Smart Quantization: Automatically snaps messy playing to the nearest grid (1/8th, 1/16th notes).
-* Sheet Music Rendering: Uses VexFlow to render professional standard drum notation.
-* State Management: Powered by Zustand for high-performance React state handling.
-
-## 🛠️ Tech Stack
-
-* Frontend: React, TypeScript, VexFlow, Zustand
-* Backend: Python 3.14, FastAPI, Uvicorn
-* Tools: Vite, npm, pip
+- **Frontend:** React, TypeScript, VexFlow, Zustand, Vite
+- **Backend:** Python, WebSockets (`audio.py`), FastAPI (`api.py`)
+- **AI Model:** [Basic Pitch](https://github.com/spotify/basic-pitch) (Spotify) — ONNX, CPU inference
 
 ---
 
-## 📦 Installation & Setup
+## Setup
 
-Follow these steps to get the project running locally.
+### Backend
 
-### 1. Clone the Repository
-   git clone https://github.com/YOUR_USERNAME/REPO_NAME.git
-   cd drum-transcriber
+Two servers must run simultaneously.
 
-### 2. Backend Setup (Python API)
-The backend handles data processing and runs on Port 5000.
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .\.venv\Scripts\Activate
+pip install -r requirements.txt
 
-1. Navigate to the backend folder:
-   cd backend
+# Terminal 1 — WebSocket AI server (port 8000)
+python audio.py
 
-2. Create and activate a virtual environment:
-   (Windows)
-   python -m venv .venv
-   .\.venv\Scripts\Activate
+# Terminal 2 — REST API (port 5000)
+python -m uvicorn api:app --reload --port 5000
+```
 
-   (Mac/Linux)
-   python3 -m venv .venv
-   source .venv/bin/activate
+### Frontend
 
-3. Install dependencies:
-   pip install -r requirements.txt
-
-4. Start the Server:
-   python -m uvicorn main:app --reload --port 5000
-
-   (You should see: Uvicorn running on http://127.0.0.1:5000)
+```bash
+npm install
+npm run dev   # http://localhost:5173
+```
 
 ---
 
-### 3. Frontend Setup (React)
-Open a new terminal (keep the backend running!) and navigate to the project root.
+## How It Works
 
-1. Install Node dependencies:
-   npm install
+1. Click **Record** — the browser captures microphone audio via the Web Audio API
+2. Float32 audio chunks stream to the WebSocket server on port 8000
+3. `audio.py` buffers chunks into a rolling window and runs Basic Pitch on each hop (768 samples ≈ 35 ms)
+4. Detected notes are emitted as `note_on` / `note_off` / `volume` / `silence_reset` events
+5. The Zustand store receives events, quantizes note durations, and appends them to the note list
+6. VexFlow re-renders the sheet music canvas on every update, grouping notes into 4-beat measures
 
-2. Start the Development Server:
-   npm run dev
+## Note Detection
 
-3. Open your browser to the local URL (usually http://localhost:5173).
+- Onset threshold: `0.6` for new notes, `0.85` to re-trigger a sustained note
+- Retrigger cooldown: `0.12s` per note
+- Overtone/ghost suppression: iterates HIGH→LOW and zeroes out harmonics (octaves + fifths above active notes)
 
----
+## Quantization
 
-## 🎹 How to Use
+Beat bucket thresholds (relative to current BPM):
 
-1.  Connect a Device (Optional)
-    Plug in your electronic drum kit or MIDI keyboard via USB. The app will automatically detect MIDI input.
+| Duration | Symbol |
+|----------|--------|
+| < 0.29 beats | 16th |
+| < 0.62 beats | 8th |
+| < 1.30 beats | quarter |
+| < 1.75 beats | dotted quarter |
+| < 2.5 beats | half |
+| < 3.5 beats | dotted half |
+| ≥ 3.5 beats | whole |
 
-2.  ...Or Use Your Computer Keyboard
-    No MIDI device? No problem. Use your keyboard to simulate drum hits:
+## PDF Export
 
-    | Key | Instrument | MIDI Note |
-    | :--- | :--- | :--- |
-    | **A** | Bass Drum | 36 |
-    | **S** | Snare Drum | 38 |
-    | **D** | Hi-Hat (Closed) | 42 |
-    | **F** | Hi-Hat (Open) | 46 |
-    | **Space** | Crash Cymbal | 49 |
-    | **J** | Ride Cymbal | 51 |
-
-3.  Play
-    Start drumming! Your notes will appear on the sheet music stave in real-time.
-
-4.  Export
-    Finished? Click the **Export PDF** button to download a professional score of your performance.
+`GET /api/export` → `api.py` reads the current session → `lilypond.py` converts VexFlow duration codes to LilyPond syntax → compiles to PDF. Requires the `lilypond` binary installed on the backend system.
