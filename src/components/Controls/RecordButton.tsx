@@ -98,7 +98,7 @@ export const RecordButton: React.FC<Props> = ({ onRecordingStopped, mode = 'reco
     await audioContext.resume();
     console.log(`[RecordButton:${mode}] AudioContext after resume, state=${audioContext.state}`);
 
-    const socket = new WebSocket(`wss://${window.location.hostname}/ws`);
+    const socket = new WebSocket('ws://localhost:8000/ws');
     socketRef.current = socket;
     console.log(`[RecordButton:${mode}] WebSocket created, readyState=${socket.readyState}`);
 

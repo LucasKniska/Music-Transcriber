@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '0.0.0.0',
-    allowedHosts: ['scoreai.cloud', 'www.scoreai.cloud'],
+    allowedHosts: ['localhost', '127.0.0.1', 'scoreai.cloud', 'www.scoreai.cloud'],
     watch: {
       ignored: ['**/venv/**', '**/node_modules/**', '**/.git/**']
     }

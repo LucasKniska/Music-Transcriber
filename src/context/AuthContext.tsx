@@ -1,6 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
-import { supabase } from '../utils/supabase';
 
 interface AuthContextType {
   user: User | null;
@@ -12,33 +11,25 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
-  loading: true,
+  loading: false,
   signOut: async () => {},
 });
 
+const LOCAL_USER = {
+  id: 'local-test-user',
+  email: 'local@localhost',
+  app_metadata: {},
+  user_metadata: {},
+  aud: 'authenticated',
+  created_at: new Date().toISOString(),
+} as unknown as User;
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user] = useState<User | null>(LOCAL_USER);
+  const [session] = useState<Session | null>(null);
+  const [loading] = useState(false);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-  };
+  const signOut = async () => {};
 
   return (
     <AuthContext.Provider value={{ user, session, loading, signOut }}>
