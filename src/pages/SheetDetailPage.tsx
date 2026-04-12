@@ -3,8 +3,6 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
 import { useScoreStore } from '../store/scoreStore';
 import { SheetMusic } from '../components/Canvas/SheetMusic';
-import { saveSession } from '../api/api';
-import { exportToPDF } from '../utils/exportPDF';
 import type { Sheet } from '../types';
 import { BTN_DANGER_COLOR, BTN_DANGER_BORDER, BTN_DANGER_HOVER } from '../constants/theme';
 
@@ -77,23 +75,7 @@ const SheetDetailPage: React.FC = () => {
     navigate('/dashboard');
   };
 
-  const handleExportPDF = async () => {
-    if (!sheet) return;
-    // Load current sheet into backend so PDF export works
-    try {
-      await saveSession({
-        title: sheet.title,
-        bpm: sheet.bpm,
-        notes: sheet.notes,
-        createdAt: sheet.created_at,
-      });
-      await exportToPDF();
-    } catch (e) {
-      alert('PDF export failed. Make sure the backend server is running.');
-    }
-  };
-
-  if (loading) {
+if (loading) {
     return <div style={{ padding: '2rem', color: '#6b7280' }}>Loading sheet...</div>;
   }
 
@@ -147,10 +129,7 @@ const SheetDetailPage: React.FC = () => {
           <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>
             {sheet.bpm} BPM · {sheet.notes.length} notes
           </span>
-          <button onClick={handleExportPDF} className="export-btn">
-            Export PDF
-          </button>
-          <button
+<button
             onClick={handleDelete}
             disabled={deleting}
             onMouseEnter={(e) => (e.currentTarget.style.background = BTN_DANGER_HOVER)}

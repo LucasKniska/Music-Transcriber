@@ -55,7 +55,7 @@ export const SheetMusic: React.FC = () => {
 
   useEffect(() => {
     if (activeNotes.size === 0) return;
-    const interval = setInterval(() => forceRenderTick(), 16);
+    const interval = setInterval(() => forceRenderTick(), 100);
     return () => clearInterval(interval);
   }, [activeNotes.size, forceRenderTick]);
 
@@ -63,9 +63,22 @@ export const SheetMusic: React.FC = () => {
     if (!rendererRef.current || !scrollContainerRef.current) return;
 
     // --- PREPARE DATA ---
-    // Only completed notes go into the measure layout; active notes get their own stave below.
     const allNotesToRender = [...notes];
     const now = Date.now() / 1000;
+
+    activeNotes.forEach((data) => {
+      const currentDurationSec = now - data.startTime;
+      const liveDuration = quantizeDuration(currentDurationSec, bpm);
+      allNotesToRender.push({
+        id: `temp-${data.midi}`,
+        keys: [formatToVexKey(data.noteName)],
+        duration: liveDuration,
+        rawDuration: currentDurationSec,
+        startTimeOffset: data.startTime,
+        isRest: false,
+        color: "#F97316",
+      });
+    });
 
     // --- RENDER ---
     rendererRef.current.innerHTML = ''; // Clear previous render
@@ -181,56 +194,12 @@ export const SheetMusic: React.FC = () => {
       x += finalMeasureWidth;
     }
 
-    // --- ACTIVE NOTE STAVE ---
-    // Rendered separately so completed-note positions never shift.
-    if (activeNotes.size > 0) {
-      const activeRenderedNotes: RenderedNote[] = [];
-      activeNotes.forEach((data) => {
-        const liveDuration = quantizeDuration(now - data.startTime, bpm);
-        activeRenderedNotes.push({
-          id: `temp-${data.midi}`,
-          keys: [formatToVexKey(data.noteName)],
-          duration: liveDuration,
-          rawDuration: now - data.startTime,
-          startTimeOffset: data.startTime,
-          isRest: false,
-          color: "#F97316",
-        });
-      });
-
-      const activeVexNotes = convertToVexNotes(activeRenderedNotes);
-      const activeVoice = new Voice({ numBeats: BEATS_PER_MEASURE, beatValue: 4 });
-      activeVoice.setStrict(false);
-      activeVoice.addTickables(activeVexNotes);
-      const activeFormatter = new Formatter().joinVoices([activeVoice]);
-      const minWidth = activeFormatter.preCalculateMinTotalWidth([activeVoice]);
-
-      let activeModifierPadding = x === START_X ? 30 : 0;
-      const activeStaveWidth = Math.max(MIN_STAVE_WIDTH, minWidth + activeModifierPadding + NOTE_PADDING);
-
-      if (x + activeStaveWidth > containerWidth) {
-        x = START_X;
-        y += SYSTEM_HEIGHT;
-        activeModifierPadding = 30;
-      }
-
-      const activeStave = new Stave(x, y, activeStaveWidth);
-      if (x === START_X) activeStave.addClef("treble");
-      activeStave.setContext(context).draw();
-
-      const availableWidth = activeStave.getNoteEndX() - activeStave.getNoteStartX() - 10;
-      if (availableWidth > 0) {
-        activeFormatter.format([activeVoice], availableWidth);
-        activeVoice.draw(context, activeStave);
-      }
-    }
-
     const finalHeight = y + SYSTEM_HEIGHT;
     rendererRef.current.style.height = `${finalHeight}px`;
     renderer.resize(containerWidth, finalHeight);
 
     if (activeNotes.size > 0 || notes.length > 0) {
-      bottomAnchorRef.current?.scrollIntoView({ behavior: "instant", block: "nearest" });
+      bottomAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
 
   }, [notes, activeNotes, bpm]);

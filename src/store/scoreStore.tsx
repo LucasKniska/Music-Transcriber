@@ -1,9 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware'; // <--- 1. Import Middleware
 import type { RenderedNote } from '../types';
-import { fetchNotes, clearAllNotes, saveSession } from '../api/api'; // Import saveSession
+import { fetchNotes, clearAllNotes } from '../api/api';
 import { quantizeDuration } from '../utils/musicMath';
-import { supabase } from '../utils/supabase';
 
 interface ActiveNoteData {
   startTime: number;
@@ -97,44 +96,8 @@ export const useScoreStore = create<ScoreState>()(
         }
       },
 
-      // --- BATCH SAVE TO SUPABASE ---
-      saveRecording: async (title: string) => {
-        const { notes, bpm } = get();
-        if (notes.length === 0) return null;
-
-        const createdAt = new Date().toISOString();
-
-        // Also keep backend in sync so PDF export works
-        try {
-          await saveSession({ title, bpm, notes, createdAt });
-        } catch (e) {
-          console.warn("Backend sync failed (PDF export may not work):", e);
-        }
-
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) {
-            console.warn("Not logged in — sheet not saved to database");
-            return null;
-          }
-
-          const { data, error } = await supabase
-            .from('sheets')
-            .insert({ user_id: user.id, title, bpm, notes })
-            .select('id')
-            .single();
-
-          if (error) {
-            console.error("Supabase save failed:", error.message);
-            return null;
-          }
-
-          console.log("Sheet saved:", data.id);
-          return data.id as string;
-        } catch (error) {
-          console.error("Failed to save sheet:", error);
-          return null;
-        }
+      saveRecording: async (_title: string) => {
+        return null;
       },
 
       loadSheet: (notes: RenderedNote[], bpm: number) => {

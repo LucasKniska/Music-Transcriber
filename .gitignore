@@ -13,6 +13,7 @@ __pycache__/
 # Environment Variables (Protect your API keys!)
 .env
 .env.local
+.vscode/
 
 # --- Node / React / Frontend ---
 # Dependencies

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/lucas/Documents/git/Music-Transcriber/**)",
+      "Bash(npm run:*)",
+      "Bash(source .venv/Scripts/activate)",
+      "Bash(source .venv/bin/activate)",
+      "Bash(python audio.py)",
+      "Bash(python -m uvicorn api:app --reload --port 5000)",
+      "Bash(pip install:*)",
+      "Bash(python:*)"
+    ]
+  }
+}
