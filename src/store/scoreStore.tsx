@@ -24,7 +24,7 @@ interface ScoreState {
   loadNotesFromBackend: () => Promise<void>;
   toggleMetronome: () => void;
   handleNoteOn: (midi: number, noteName: string) => void;
-  handleNoteOff: (midi: number) => void;
+  handleNoteOff: (midi: number, durationMs?: number) => void;
   forceRenderTick: () => void;
   setCurrentPitch: (note: string | null) => void;
 
@@ -61,12 +61,14 @@ export const useScoreStore = create<ScoreState>()(
         set({ activeNotes: newActive, currentPitch: noteName });
       },
 
-      handleNoteOff: (midi) => {
+      handleNoteOff: (midi, durationMs) => {
         const { activeNotes, notes, bpm } = get();
         const noteData = activeNotes.get(midi);
-        
+
         if (noteData) {
-          const durationSec = (Date.now() / 1000) - noteData.startTime;
+          const durationSec = durationMs !== undefined
+            ? durationMs / 1000
+            : (Date.now() / 1000) - noteData.startTime;
           const finalDuration = quantizeDuration(durationSec, bpm);
           
           // Create the note with RAW data for future editing

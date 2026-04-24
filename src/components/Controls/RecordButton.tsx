@@ -2,13 +2,23 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useScoreStore } from '../../store/scoreStore';
 
 interface NoteEvent {
-  type: 'note_on' | 'note_off' | 're_trigger' | 'volume' | 'silence_reset';
-  note?: string;
+  type: 'session_start' | 'note_on' | 'note_off' | 'retrigger' | 'silence' | 'session_end' | 'volume';
+  session_id?: string;
+  time_ms?: number;
   midi?: number;
-  event?: string;
+  note?: string;
+  velocity?: number;
+  duration_ms?: number;
+  is_chord?: boolean;
+  chord_notes?: string[];
+  chord_midis?: number[];
+  chord_label?: string | null;
+  gap_ms?: number;
+  notes_ended?: string[];
+  midis_ended?: number[];
+  total_notes?: number;
+  total_chords?: number;
   value?: number;
-  duration?: number;
-  start_time?: number;
 }
 
 interface Props {
@@ -77,15 +87,27 @@ export const RecordButton: React.FC<Props> = ({ onRecordingStopped, mode = 'reco
   }, []);
 
   const handleServerEvent = useCallback((data: NoteEvent) => {
-    if (mode === 'monitor') {
-      if (data.type === 'note_on' && data.note) setCurrentPitch(data.note);
-      else if (data.type === 'note_off' || data.type === 'silence_reset') setCurrentPitch(null);
+    if (data.type === 'session_start' || data.type === 'session_end' || data.type === 'volume') {
       return;
     }
+
+    if (mode === 'monitor') {
+      if ((data.type === 'note_on' || data.type === 'retrigger') && data.note) setCurrentPitch(data.note);
+      else if (data.type === 'note_off' || data.type === 'silence') setCurrentPitch(null);
+      return;
+    }
+
     if (data.type === 'note_on' && data.midi !== undefined && data.note) {
       handleNoteOn(data.midi, data.note);
     } else if (data.type === 'note_off' && data.midi !== undefined) {
-      handleNoteOff(data.midi);
+      handleNoteOff(data.midi, data.duration_ms);
+    } else if (data.type === 'retrigger' && data.midi !== undefined && data.note) {
+      handleNoteOff(data.midi, data.gap_ms);
+      handleNoteOn(data.midi, data.note);
+    } else if (data.type === 'silence' && data.midis_ended) {
+      for (const midi of data.midis_ended) {
+        handleNoteOff(midi);
+      }
     }
   }, [mode, handleNoteOn, handleNoteOff, setCurrentPitch]);
 

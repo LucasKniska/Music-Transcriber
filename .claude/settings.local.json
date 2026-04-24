@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(chmod +x *)",
+      "Bash(iconv -f UTF-16 -t UTF-8 /Users/lucas.kniska/Documents/Music-Transcriber/backend/requirements.txt)",
+      "Bash(/Users/lucas.kniska/Documents/Music-Transcriber/backend/.venv/bin/pip install *)",
+      "Bash(/Users/lucas.kniska/Documents/Music-Transcriber/backend/.venv/bin/python *)",
+      "Bash(.venv/bin/python -c \"from basic_pitch.inference import Model, ICASSP_2022_MODEL_PATH; print\\('basic_pitch imported ok'\\)\")",
+      "Bash(npx tsc *)"
     ]
   }
 }
