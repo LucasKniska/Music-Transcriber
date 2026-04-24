@@ -16,7 +16,9 @@ HOP_SIZE         = 2048
 WINDOW_LENGTH    = 43844
 NOTE_THRESHOLD   = 0.4
 ONSET_THRESHOLD  = 0.5
-MIN_VOLUME       = 0.001
+MIN_VOLUME       = 0.015
+QUIET_VOLUME     = 0.03
+QUIET_NOTE_THRESH = 0.6
 RETRIGGER_GAP_MS = 100
 FOCUS_FRAMES     = 5
 MIDI_OFFSET      = 21
@@ -283,10 +285,12 @@ async def audio_handler(websocket):
             note_now  = np.max(note_probs[0,  -FOCUS_FRAMES:, :], axis=0)
             onset_now = np.max(onset_probs[0, -FOCUS_FRAMES:, :], axis=0)
 
+            effective_thresh = QUIET_NOTE_THRESH if volume < QUIET_VOLUME else NOTE_THRESHOLD
+
             detected_this_frame: Set[int] = set()
             for i in range(88):
                 midi = i + MIDI_OFFSET
-                if note_now[i] > NOTE_THRESHOLD:
+                if note_now[i] > effective_thresh:
                     detected_this_frame.add(midi)
 
             active_list = sorted(detected_this_frame)
@@ -294,7 +298,7 @@ async def audio_handler(websocket):
             # ── Note detection ────────────────────────────────────────────
             for i in range(88):
                 midi      = i + MIDI_OFFSET
-                is_on     = note_now[i]  > NOTE_THRESHOLD
+                is_on     = note_now[i]  > effective_thresh
                 is_attack = onset_now[i] > ONSET_THRESHOLD
 
                 if not is_on:
