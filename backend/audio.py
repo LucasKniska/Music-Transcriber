@@ -138,6 +138,7 @@ class MessageBus:
             "note":        midi_to_note(midi),
             "duration_ms": duration_ms,
             "is_chord":    was_chord,
+            "chord_midis": sorted(chord_midis),
             "chord_label": label,
         })
 
@@ -309,18 +310,22 @@ async def audio_handler(websocket):
                             active_notes[midi]["chord_midis"] = active_list
                             await bus.retrigger(midi, velocity, gap_ms, active_list)
                 else:
-                    active_notes[midi] = {"onset_time": time.time(), "chord_midis": active_list}
+                    active_notes[midi] = {"onset_time": time.time(), "chord_midis": active_list, "miss_count": 0}
                     await bus.note_on(midi, velocity, active_list)
                     total_notes += 1
                     if len(active_list) > 1:
                         total_chords += 1
 
-            # ── Cleanup ended notes ───────────────────────────────────────
+            # ── Cleanup ended notes (with hysteresis) ─────────────────────
             for midi in list(active_notes.keys()):
                 if midi not in detected_this_frame:
-                    info      = active_notes.pop(midi)
-                    was_chord = len(info["chord_midis"]) > 1
-                    await bus.note_off(midi, info["onset_time"], was_chord, info["chord_midis"])
+                    active_notes[midi]["miss_count"] = active_notes[midi].get("miss_count", 0) + 1
+                    if active_notes[midi]["miss_count"] >= 2:
+                        info      = active_notes.pop(midi)
+                        was_chord = len(info["chord_midis"]) > 1
+                        await bus.note_off(midi, info["onset_time"], was_chord, info["chord_midis"])
+                else:
+                    active_notes[midi]["miss_count"] = 0
 
     except websockets.exceptions.ConnectionClosed:
         print(f"Connection closed. Notes: {total_notes}, Chords: {total_chords}")

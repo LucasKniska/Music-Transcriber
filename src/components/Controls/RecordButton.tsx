@@ -98,12 +98,12 @@ export const RecordButton: React.FC<Props> = ({ onRecordingStopped, mode = 'reco
     }
 
     if (data.type === 'note_on' && data.midi !== undefined && data.note) {
-      handleNoteOn(data.midi, data.note);
+      handleNoteOn(data.midi, data.note, data.chord_midis);
     } else if (data.type === 'note_off' && data.midi !== undefined) {
       handleNoteOff(data.midi, data.duration_ms);
     } else if (data.type === 'retrigger' && data.midi !== undefined && data.note) {
       handleNoteOff(data.midi, data.gap_ms);
-      handleNoteOn(data.midi, data.note);
+      handleNoteOn(data.midi, data.note, data.chord_midis);
     } else if (data.type === 'silence' && data.midis_ended) {
       for (const midi of data.midis_ended) {
         handleNoteOff(midi);

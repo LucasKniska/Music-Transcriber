@@ -44,6 +44,8 @@ export const SheetMusic: React.FC = () => {
   // Cache VexFlow StaveNote arrays for completed (non-active) measures to avoid
   // recreating expensive objects on every 100ms active-note tick.
   const vexNoteCache = useRef<Map<string, StaveNote[]>>(new Map());
+  const lastActiveQuantized = useRef<Map<number, string>>(new Map());
+  const lastRenderHash = useRef<string>('');
 
   const { notes, activeNotes, bpm, loadNotesFromBackend, forceRenderTick } = useScoreStore();
 
@@ -54,10 +56,26 @@ export const SheetMusic: React.FC = () => {
   }, [loadNotesFromBackend]);
 
   useEffect(() => {
-    if (activeNotes.size === 0) return;
-    const interval = setInterval(() => forceRenderTick(), 100);
+    if (activeNotes.size === 0) {
+      lastActiveQuantized.current.clear();
+      return;
+    }
+    const interval = setInterval(() => {
+      const now = Date.now() / 1000;
+      let changed = false;
+      const current = new Map<number, string>();
+      activeNotes.forEach((data, midi) => {
+        const dur = quantizeDuration(now - data.startTime, bpm);
+        current.set(midi, dur);
+        if (lastActiveQuantized.current.get(midi) !== dur) changed = true;
+      });
+      if (changed || current.size !== lastActiveQuantized.current.size) {
+        lastActiveQuantized.current = current;
+        forceRenderTick();
+      }
+    }, 250);
     return () => clearInterval(interval);
-  }, [activeNotes.size, forceRenderTick]);
+  }, [activeNotes.size, forceRenderTick, bpm]);
 
   useEffect(() => {
     if (!rendererRef.current || !scrollContainerRef.current) return;
@@ -81,7 +99,11 @@ export const SheetMusic: React.FC = () => {
     });
 
     // --- RENDER ---
-    rendererRef.current.innerHTML = ''; // Clear previous render
+    const renderHash = allNotesToRender.map(n => `${n.id}:${n.duration}`).join('|');
+    if (renderHash === lastRenderHash.current) return;
+    lastRenderHash.current = renderHash;
+
+    rendererRef.current.innerHTML = '';
 
     // 1. Calculate Measures (Strict Grouping)
     const measures: RenderedNote[][] = [];

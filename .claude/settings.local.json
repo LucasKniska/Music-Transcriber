@@ -7,7 +7,9 @@
       "Bash(/Users/lucas.kniska/Documents/Music-Transcriber/backend/.venv/bin/pip install *)",
       "Bash(/Users/lucas.kniska/Documents/Music-Transcriber/backend/.venv/bin/python *)",
       "Bash(.venv/bin/python -c \"from basic_pitch.inference import Model, ICASSP_2022_MODEL_PATH; print\\('basic_pitch imported ok'\\)\")",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(xargs ls *)",
+      "Bash(npm run *)"
     ]
   }
 }
