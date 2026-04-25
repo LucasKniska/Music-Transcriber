@@ -1,9 +1,10 @@
-import React, { useEffect, useRef } from 'react';
-import { Renderer, Stave, StaveNote, Voice, Formatter } from 'vexflow';
+import React, { useEffect, useRef, useCallback } from 'react';
+import { Renderer, Stave, Voice, Formatter } from 'vexflow';
 import { useScoreStore, formatToVexKey } from '../../store/scoreStore';
 import { convertToVexNotes } from '../../utils/VexMap';
 import { quantizeDuration } from '../../utils/musicMath';
 import type { RenderedNote } from '../../types';
+import { NoteEditPopover } from './NoteEditPopover';
 
 const MIN_STAVE_WIDTH = 250;
 const SYSTEM_HEIGHT = 150;
@@ -11,10 +12,8 @@ const START_X = 10;
 const START_Y = 20;
 const BEATS_PER_MEASURE = 4;
 const MEASURE_BATCH_SIZE = 4;
-const NOTE_PADDING = 10; // Reduced padding so we rely on formatter
+const NOTE_PADDING = 10;
 
-// Helper: Calculate exact beat value for measure grouping
-// 'q' = 1, 'h' = 2, '8' = 0.5, etc.
 const getNoteDuration = (durationString: string): number => {
   const base = durationString.replace(/[rd]/g, '');
   let value = 0;
@@ -29,7 +28,6 @@ const getNoteDuration = (durationString: string): number => {
     default: value = 0;
   }
 
-  // Handle dots (multiply by 1.5)
   if (durationString.includes('d')) {
     value *= 1.5;
   }
@@ -41,13 +39,13 @@ export const SheetMusic: React.FC = () => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<HTMLDivElement>(null);
   const bottomAnchorRef = useRef<HTMLDivElement>(null);
-  // Cache VexFlow StaveNote arrays for completed (non-active) measures to avoid
-  // recreating expensive objects on every 100ms active-note tick.
-  const vexNoteCache = useRef<Map<string, StaveNote[]>>(new Map());
+  const vexNoteCache = useRef<Map<string, ReturnType<typeof convertToVexNotes>>>(new Map());
   const lastActiveQuantized = useRef<Map<number, string>>(new Map());
   const lastRenderHash = useRef<string>('');
+  const noteIdMapRef = useRef<Map<string, string>>(new Map());
+  const noteBoundsRef = useRef<Map<string, DOMRect>>(new Map());
 
-  const { notes, activeNotes, bpm, loadNotesFromBackend, forceRenderTick } = useScoreStore();
+  const { notes, activeNotes, bpm, selectedNoteId, isModelRunning, loadNotesFromBackend, forceRenderTick, selectNote } = useScoreStore();
 
   useEffect(() => {
     if (notes.length === 0) {
@@ -77,10 +75,32 @@ export const SheetMusic: React.FC = () => {
     return () => clearInterval(interval);
   }, [activeNotes.size, forceRenderTick, bpm]);
 
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    if (isModelRunning) return;
+    const target = e.target as SVGElement;
+    const noteGroup = target.closest('g.vf-stavenote');
+    if (noteGroup) {
+      const vfId = noteGroup.getAttribute('id')?.replace('vf-', '');
+      const noteId = vfId ? noteIdMapRef.current.get(vfId) : null;
+      if (noteId && !noteId.startsWith('temp-')) {
+        selectNote(noteId);
+        return;
+      }
+    }
+    selectNote(null);
+  }, [isModelRunning, selectNote]);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const onScroll = () => selectNote(null);
+    container.addEventListener('scroll', onScroll);
+    return () => container.removeEventListener('scroll', onScroll);
+  }, [selectNote]);
+
   useEffect(() => {
     if (!rendererRef.current || !scrollContainerRef.current) return;
 
-    // --- PREPARE DATA ---
     const allNotesToRender = [...notes];
     const now = Date.now() / 1000;
 
@@ -98,36 +118,29 @@ export const SheetMusic: React.FC = () => {
       });
     });
 
-    // --- RENDER ---
-    const renderHash = allNotesToRender.map(n => `${n.id}:${n.duration}`).join('|');
+    const renderHash = allNotesToRender.map(n => `${n.id}:${n.duration}:${n.keys.join('+')}`).join('|') + `|sel:${selectedNoteId}`;
     if (renderHash === lastRenderHash.current) return;
     lastRenderHash.current = renderHash;
 
     rendererRef.current.innerHTML = '';
+    const accumulatedIdMap = new Map<string, string>();
 
-    // 1. Calculate Measures (Strict Grouping)
     const measures: RenderedNote[][] = [];
     let currentMeasure: RenderedNote[] = [];
     let currentBeats = 0;
 
     allNotesToRender.forEach((note) => {
       const val = getNoteDuration(note.duration);
-
-      // Safety Check: Use 0.01 epsilon for float comparison errors
-      // If adding this note pushes us over 4.01 beats, start a new measure
       if (currentBeats + val > BEATS_PER_MEASURE + 0.01) {
         measures.push(currentMeasure);
         currentMeasure = [];
         currentBeats = 0;
       }
-
       currentMeasure.push(note);
       currentBeats += val;
     });
-    // Push the last partial measure
     if (currentMeasure.length > 0) measures.push(currentMeasure);
 
-    // 2. Setup Renderer
     const filledCount = measures.length;
     const totalStaves = Math.ceil(Math.max(filledCount, 1) / MEASURE_BATCH_SIZE) * MEASURE_BATCH_SIZE;
 
@@ -138,24 +151,24 @@ export const SheetMusic: React.FC = () => {
     let x = START_X;
     let y = START_Y;
 
-    // 3. Render Loop
-    // 3. Render Loop
     for (let i = 0; i < totalStaves; i++) {
       const measureNotes = measures[i];
       let voice: Voice | null = null;
       let formatter: Formatter | null = null;
       let minRequiredWidth = 0;
 
-      // 1. Prepare Voice & Calculate Note Width
       if (measureNotes && measureNotes.length > 0) {
-        // Use cache for fully-completed measures (no active/temp notes)
         const isStable = measureNotes.every((n) => !n.id.startsWith('temp-'));
-        const cacheKey = isStable ? measureNotes.map((n) => n.id).join(',') : '';
-        let vexNotes = isStable ? vexNoteCache.current.get(cacheKey) : undefined;
-        if (!vexNotes) {
-          vexNotes = convertToVexNotes(measureNotes);
-          if (isStable) vexNoteCache.current.set(cacheKey, vexNotes);
+        const cacheKey = isStable ? measureNotes.map((n) => `${n.id}:${n.duration}:${n.keys.join('+')}`).join(',') + `|sel:${selectedNoteId}` : '';
+        let cached = isStable ? vexNoteCache.current.get(cacheKey) : undefined;
+        if (!cached) {
+          cached = convertToVexNotes(measureNotes, selectedNoteId);
+          if (isStable) vexNoteCache.current.set(cacheKey, cached);
         }
+
+        const { vexNotes, idMap } = cached;
+        idMap.forEach((noteId, vfId) => accumulatedIdMap.set(vfId, noteId));
+
         voice = new Voice({ numBeats: BEATS_PER_MEASURE, beatValue: 4 });
         voice.setStrict(false);
         voice.addTickables(vexNotes);
@@ -164,9 +177,6 @@ export const SheetMusic: React.FC = () => {
         minRequiredWidth = formatter.preCalculateMinTotalWidth([voice]);
       }
 
-      // 2. Check Wrap (Preview)
-      // We do a rough check to see if we need to move to the next line.
-      // This tells us if we will need to add a Clef (because x resets to START_X).
       const estimatedWidth = Math.max(MIN_STAVE_WIDTH, minRequiredWidth + NOTE_PADDING);
 
       if (x + estimatedWidth > containerWidth) {
@@ -174,24 +184,15 @@ export const SheetMusic: React.FC = () => {
         y += SYSTEM_HEIGHT;
       }
 
-      // 3. Add Padding for Clef / Time Signature
-      // Now that 'x' is finalized, we know if we are at the start of a line.
       let modifierPadding = 0;
-
-      // If start of line (or first measure), we will have a Treble Clef (~30px)
       if (x === START_X || i === 0) modifierPadding += 30;
-
-      // If first measure, we will have a Time Signature (~30px)
       if (i === 0) modifierPadding += 30;
 
-      // 4. Calculate Final Width
-      // Add the modifier padding to the Note Width so the Stave grows to accommodate both.
       const finalMeasureWidth = Math.max(
         MIN_STAVE_WIDTH,
         minRequiredWidth + modifierPadding + NOTE_PADDING
       );
 
-      // 5. Draw Stave
       const stave = new Stave(x, y, finalMeasureWidth);
 
       if (x === START_X || i === 0) {
@@ -200,9 +201,7 @@ export const SheetMusic: React.FC = () => {
       }
       stave.setContext(context).draw();
 
-      // 6. Format and Draw Voice
       if (voice && formatter) {
-        // Now 'availableWidth' will actually be large enough for the notes
         const startX = stave.getNoteStartX();
         const endX = stave.getNoteEndX();
         const availableWidth = endX - startX - 10;
@@ -220,15 +219,34 @@ export const SheetMusic: React.FC = () => {
     rendererRef.current.style.height = `${finalHeight}px`;
     renderer.resize(containerWidth, finalHeight);
 
+    noteIdMapRef.current = accumulatedIdMap;
+
+    // Build bounding box map for popover positioning
+    const svgEl = rendererRef.current.querySelector('svg');
+    if (svgEl) {
+      const bounds = new Map<string, DOMRect>();
+      svgEl.querySelectorAll('g.vf-stavenote').forEach(g => {
+        const vfId = g.getAttribute('id')?.replace('vf-', '');
+        const noteId = vfId ? accumulatedIdMap.get(vfId) : null;
+        if (noteId) {
+          bounds.set(noteId, g.getBoundingClientRect());
+        }
+      });
+      noteBoundsRef.current = bounds;
+    }
+
     if (activeNotes.size > 0 || notes.length > 0) {
       bottomAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
 
-  }, [notes, activeNotes, bpm]);
+  }, [notes, activeNotes, bpm, selectedNoteId]);
+
+  const selectedBounds = selectedNoteId ? noteBoundsRef.current.get(selectedNoteId) : null;
 
   return (
     <div
       ref={scrollContainerRef}
+      onClick={handleClick}
       style={{
         flex: 1,
         height: '100%',
@@ -239,9 +257,17 @@ export const SheetMusic: React.FC = () => {
         border: '1px solid rgba(249,115,22,0.1)',
         borderRadius: '0.75rem',
         padding: '0.5rem',
+        cursor: isModelRunning ? 'default' : 'pointer',
       }}
     >
       <div ref={rendererRef} data-sheet-svg="true" />
+      {selectedNoteId && selectedBounds && (
+        <NoteEditPopover
+          noteId={selectedNoteId}
+          bounds={selectedBounds}
+          containerRef={scrollContainerRef}
+        />
+      )}
       <div ref={bottomAnchorRef} style={{ height: 1 }} />
     </div>
   );

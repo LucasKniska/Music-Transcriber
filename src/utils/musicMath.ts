@@ -37,3 +37,36 @@ export const getDurationValue = (duration: string): number => {
     default:   return 0;
   }
 };
+
+const CHROMATIC: string[] = ['c','c#','d','d#','e','f','f#','g','g#','a','a#','b'];
+
+export const shiftSemitone = (key: string, direction: 'up' | 'down'): string => {
+  const parts = key.split('/');
+  if (parts.length !== 2) return key;
+  const noteName = parts[0].toLowerCase();
+  let octave = parseInt(parts[1], 10);
+  const idx = CHROMATIC.indexOf(noteName);
+  if (idx === -1 || isNaN(octave)) return key;
+
+  let newIdx = idx + (direction === 'up' ? 1 : -1);
+  if (newIdx >= CHROMATIC.length) { newIdx = 0; octave++; }
+  if (newIdx < 0) { newIdx = CHROMATIC.length - 1; octave--; }
+
+  if (octave < 0 || octave > 8) return key;
+  return `${CHROMATIC[newIdx]}/${octave}`;
+};
+
+const DURATION_ORDER: NoteDuration[] = ['16', '8', 'q', 'qd', 'h', 'hd', 'w'];
+
+export const cycleDurationStep = (current: NoteDuration, direction: 'longer' | 'shorter'): NoteDuration => {
+  let idx = DURATION_ORDER.indexOf(current);
+  if (idx === -1) {
+    // Triplet durations snap to nearest neighbor
+    if (current === '8r') idx = direction === 'longer' ? 1 : 0;
+    else if (current === 'qr') idx = direction === 'longer' ? 2 : 1;
+    else return current;
+  } else {
+    idx += direction === 'longer' ? 1 : -1;
+  }
+  return DURATION_ORDER[Math.max(0, Math.min(idx, DURATION_ORDER.length - 1))];
+};

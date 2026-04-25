@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware'; // <--- 1. Import Middleware
 import type { RenderedNote } from '../types';
 import { fetchNotes, clearAllNotes } from '../api/api';
-import { quantizeDuration } from '../utils/musicMath';
+import { quantizeDuration, shiftSemitone, cycleDurationStep } from '../utils/musicMath';
 
 interface ActiveNoteData {
   startTime: number;
@@ -29,6 +29,7 @@ interface ScoreState {
   isMetronomeOn: boolean;
   currentPitch: string | null;
   isModelRunning: boolean;
+  selectedNoteId: string | null;
 
   setBpm: (newBpm: number) => void;
   setModelRunning: (v: boolean) => void;
@@ -40,7 +41,13 @@ interface ScoreState {
   forceRenderTick: () => void;
   setCurrentPitch: (note: string | null) => void;
 
-  // NEW ACTIONS
+  selectNote: (noteId: string | null) => void;
+  deleteNote: (noteId: string) => void;
+  shiftPitch: (noteId: string, direction: 'up' | 'down') => void;
+  cycleDuration: (noteId: string, direction: 'longer' | 'shorter') => void;
+  insertNoteAfter: (noteId: string) => void;
+  combineIntoChord: (noteId: string, direction: 'left' | 'right') => void;
+
   saveRecording: (title: string) => Promise<string | null>;
   loadSheet: (notes: RenderedNote[], bpm: number) => void;
 }
@@ -61,10 +68,73 @@ export const useScoreStore = create<ScoreState>()(
       isMetronomeOn: false,
       currentPitch: null,
       isModelRunning: false,
+      selectedNoteId: null,
 
       setBpm: (newBpm) => set({ bpm: newBpm }),
       setCurrentPitch: (note) => set({ currentPitch: note }),
       setModelRunning: (v) => set({ isModelRunning: v }),
+
+      selectNote: (noteId) => set({ selectedNoteId: noteId }),
+
+      deleteNote: (noteId) => {
+        const { notes: currentNotes } = get();
+        set({ notes: currentNotes.filter(n => n.id !== noteId), selectedNoteId: null });
+      },
+
+      shiftPitch: (noteId, direction) => {
+        const { notes: currentNotes } = get();
+        set({
+          notes: currentNotes.map(n =>
+            n.id === noteId
+              ? { ...n, keys: n.keys.map(k => shiftSemitone(k, direction)) }
+              : n
+          ),
+        });
+      },
+
+      cycleDuration: (noteId, direction) => {
+        const { notes: currentNotes } = get();
+        set({
+          notes: currentNotes.map(n =>
+            n.id === noteId
+              ? { ...n, duration: cycleDurationStep(n.duration, direction) }
+              : n
+          ),
+        });
+      },
+
+      insertNoteAfter: (noteId) => {
+        const { notes: currentNotes } = get();
+        const idx = currentNotes.findIndex(n => n.id === noteId);
+        if (idx === -1) return;
+        const newNote: RenderedNote = {
+          id: crypto.randomUUID(),
+          keys: ['c/4'],
+          duration: 'q',
+          rawDuration: 0,
+          startTimeOffset: 0,
+          isRest: false,
+          color: 'black',
+        };
+        const updated = [...currentNotes];
+        updated.splice(idx + 1, 0, newNote);
+        set({ notes: updated, selectedNoteId: newNote.id });
+      },
+
+      combineIntoChord: (noteId, direction) => {
+        const { notes: currentNotes } = get();
+        const idx = currentNotes.findIndex(n => n.id === noteId);
+        if (idx === -1) return;
+        const targetIdx = direction === 'left' ? idx - 1 : idx + 1;
+        if (targetIdx < 0 || targetIdx >= currentNotes.length) return;
+        const source = currentNotes[idx];
+        const target = currentNotes[targetIdx];
+        const mergedKeys = [...new Set([...target.keys, ...source.keys])].sort();
+        const updated = currentNotes
+          .filter(n => n.id !== noteId)
+          .map(n => n.id === target.id ? { ...n, keys: mergedKeys } : n);
+        set({ notes: updated, selectedNoteId: target.id });
+      },
 
       handleNoteOn: (midi, noteName, chordMidis?) => {
         const pending = noteOffDebounce.get(midi);
@@ -214,7 +284,7 @@ export const useScoreStore = create<ScoreState>()(
           if (group.timerId) clearTimeout(group.timerId);
         }
         pendingChordNotes.clear();
-        set({ notes: [], activeNotes: new Map() });
+        set({ notes: [], activeNotes: new Map(), selectedNoteId: null });
         clearAllNotes().catch(e => console.error(e));
       },
 
@@ -231,7 +301,7 @@ export const useScoreStore = create<ScoreState>()(
     }),
     {
       name: 'maestro-backup', // Unique name for LocalStorage key
-      partialize: (state) => ({ notes: state.notes, bpm: state.bpm }), // Only persist notes and settings
+      partialize: (state) => ({ notes: state.notes, bpm: state.bpm }),
     }
   )
 );

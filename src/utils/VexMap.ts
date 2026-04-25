@@ -1,36 +1,47 @@
-import { StaveNote, Dot, Accidental } from 'vexflow'; // <--- 1. Import Accidental
+import { StaveNote, Dot, Accidental } from 'vexflow';
 import type { RenderedNote } from '../types';
 
-export const convertToVexNotes = (notes: RenderedNote[]) => {
-  return notes.map((note) => {
-    // 1. Clean the duration string
+export interface VexNoteResult {
+  vexNotes: StaveNote[];
+  idMap: Map<string, string>; // VexFlow element id → RenderedNote id
+}
+
+export const convertToVexNotes = (
+  notes: RenderedNote[],
+  selectedNoteId?: string | null,
+): VexNoteResult => {
+  const idMap = new Map<string, string>();
+
+  const vexNotes = notes.map((note) => {
     const baseDuration = note.duration.replace('d', '').replace('r', '');
 
     const staveNote = new StaveNote({
-      clef: "treble", 
+      clef: "treble",
       keys: note.keys,
       duration: baseDuration,
       autoStem: true,
     });
 
-    // 2. Add Accidentals (Sharps)
-    // We iterate through every key (handling chords) to see if it needs a sharp
+    const vfId = staveNote.getAttribute('id');
+    idMap.set(vfId, note.id);
+
     note.keys.forEach((key, index) => {
       if (key.includes('#')) {
         staveNote.addModifier(new Accidental('#'), index);
       }
     });
 
-    // 3. Add Dots
     if (note.duration.includes('d')) {
       Dot.buildAndAttach([staveNote], { all: true });
     }
 
-    // 4. Apply Color
-    if (note.color) {
-      staveNote.setStyle({ fillStyle: note.color, strokeStyle: note.color });
+    const color = note.id === selectedNoteId ? '#2563EB' : note.color;
+    if (color) {
+      staveNote.setStyle({ fillStyle: color, strokeStyle: color });
     }
 
     return staveNote;
   });
+
+  return { vexNotes, idMap };
 };

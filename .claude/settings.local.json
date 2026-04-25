@@ -9,7 +9,10 @@
       "Bash(.venv/bin/python -c \"from basic_pitch.inference import Model, ICASSP_2022_MODEL_PATH; print\\('basic_pitch imported ok'\\)\")",
       "Bash(npx tsc *)",
       "Bash(xargs ls *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts|json\\)$\")",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' http://localhost:5173/)",
+      "Bash(npx vite *)"
     ]
   }
 }
