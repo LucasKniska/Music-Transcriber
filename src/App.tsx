@@ -10,7 +10,7 @@ import { useMetronome } from './hooks/useMetronome';
 function App() {
   useMetronome();
 
-  const { clearScore } = useScoreStore();
+  const { clearScore, insertionPointNoteId, clearInsertionPoint } = useScoreStore();
 
   useEffect(() => {
     clearScore();
@@ -41,6 +41,49 @@ function App() {
           <button className="btn-danger" onClick={() => clearScore()}>
             Clear
           </button>
+
+          {insertionPointNoteId && (
+            <>
+              <span className="controls-divider" />
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.25rem 0.65rem',
+                background: 'rgba(249,115,22,0.1)',
+                border: '1px solid rgba(249,115,22,0.25)',
+                borderRadius: '999px',
+                fontSize: '0.72rem',
+                fontWeight: 600,
+                color: '#92400E',
+                whiteSpace: 'nowrap',
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#F97316', flexShrink: 0 }} />
+                Marker set
+                <button
+                  onClick={() => clearInsertionPoint()}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 16,
+                    height: 16,
+                    padding: 0,
+                    border: 'none',
+                    borderRadius: '50%',
+                    background: 'rgba(249,115,22,0.15)',
+                    color: '#92400E',
+                    fontSize: '0.65rem',
+                    cursor: 'pointer',
+                    lineHeight: 1,
+                  }}
+                  title="Clear insertion point"
+                >
+                  ✕
+                </button>
+              </span>
+            </>
+          )}
         </div>
       </header>
 

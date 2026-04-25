@@ -1,0 +1,65 @@
+You are reviewing and improving a Python WebSocket server that performs ONNX CPU inference per message.
+
+Goals:
+
+1. Ensure the WebSocket server is fully asynchronous (non-blocking) using asyncio
+2. Ensure inference execution utilizes multiple CPU cores (not limited by the GIL)
+3. Maintain low latency (<100 ms per request)
+4. Keep the architecture simple (single machine, no distributed systems)
+
+Current constraints:
+
+* Each client sends ~10 messages/sec over a persistent WebSocket
+* Each message triggers ~10 ms ONNX inference (CPU-bound)
+* ~10 concurrent users
+* Running on a single EC2 instance
+
+What I need you to do:
+
+1. Analyze whether the current implementation is truly async:
+
+   * Check if any blocking calls (especially inference) are running in the event loop
+   * Identify anything that would block other WebSocket connections
+
+2. Refactor the architecture so that:
+
+   * WebSocket handling remains async (asyncio-based)
+   * Inference runs in parallel across multiple CPU cores
+
+3. Implement one of the following correctly:
+
+   * multiprocessing (ProcessPoolExecutor preferred), OR
+   * a worker pool model that bypasses the GIL
+
+4. Ensure:
+
+   * The event loop is never blocked by inference
+   * Backpressure is handled (don’t overload workers)
+   * Results are returned to the correct WebSocket client
+
+5. Provide:
+
+   * Clean, production-quality Python code
+   * Clear explanation of why this uses multiple cores
+   * Explanation of how many concurrent inferences can run
+
+6. Add a simple test or benchmark:
+
+   * Simulate ~100 requests/sec
+   * Show that multiple cores are being utilized
+
+Important:
+
+* Do NOT use threading for CPU-bound inference (due to GIL)
+* Do NOT suggest distributed systems, Redis, or queues yet
+* Focus on a single-machine, efficient design
+
+Bonus:
+
+* If ONNX runtime has built-in parallelism options, explain how to enable and tune them
+
+Output:
+
+* Final code
+* Short explanation of concurrency model (async vs multiprocessing)
+* Any tradeoffs or limitations

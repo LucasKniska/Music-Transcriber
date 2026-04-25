@@ -30,7 +30,7 @@ export const RecordButton: React.FC<Props> = ({ onRecordingStopped, mode = 'reco
   const [isRecording, setIsRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
-  const { handleNoteOn, handleNoteOff, setCurrentPitch, setModelRunning, bpm } = useScoreStore();
+  const { handleNoteOn, handleNoteOff, setCurrentPitch, setModelRunning, bpm, insertionPointNoteId, startRecordingAtInsertionPoint, clearInsertionPoint } = useScoreStore();
 
   const socketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -113,6 +113,10 @@ export const RecordButton: React.FC<Props> = ({ onRecordingStopped, mode = 'reco
 
   const startStreaming = async () => {
     console.log(`[RecordButton:${mode}] startStreaming called`);
+
+    if (mode === 'record' && insertionPointNoteId !== null) {
+      startRecordingAtInsertionPoint();
+    }
 
     const audioContext = new window.AudioContext({ sampleRate: 22050 });
     audioContextRef.current = audioContext;
@@ -222,6 +226,21 @@ export const RecordButton: React.FC<Props> = ({ onRecordingStopped, mode = 'reco
   };
 
   const isMonitor = mode === 'monitor';
+  const hasMarker = !isMonitor && !isRecording && insertionPointNoteId !== null;
+
+  const startFromEnd = () => {
+    clearInsertionPoint();
+    startStreaming();
+  };
+
+  const MicIcon = () => (
+    <svg className="rec-mic-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+      <line x1="12" y1="19" x2="12" y2="23"/>
+      <line x1="8" y1="23" x2="16" y2="23"/>
+    </svg>
+  );
 
   return (
     <>
@@ -335,42 +354,95 @@ export const RecordButton: React.FC<Props> = ({ onRecordingStopped, mode = 'reco
           animation: rec-dot-blink 1.2s ease-in-out infinite;
           flex-shrink: 0;
         }
+
+        .rec-split-pill {
+          display: inline-flex;
+          align-items: stretch;
+          border-radius: 999px;
+          overflow: hidden;
+          box-shadow: 0 2px 14px rgba(249,115,22,0.35);
+          font-family: inherit;
+        }
+        .rec-split-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          border: none;
+          padding: 0.42rem 1rem;
+          font-size: 0.875rem;
+          font-weight: 600;
+          font-family: inherit;
+          letter-spacing: 0.01em;
+          cursor: pointer;
+          white-space: nowrap;
+          outline: none;
+          background: #F97316;
+          color: white;
+          transition: background 0.15s, transform 0.18s;
+        }
+        .rec-split-btn:hover { background: #C2410C; }
+        .rec-split-btn:active { transform: scale(0.98); }
+        .rec-split-left {
+          padding-left: 0.85rem;
+          font-weight: 700;
+          border-top-left-radius: 999px;
+          border-bottom-left-radius: 999px;
+          border-top-right-radius: 0;
+          border-bottom-right-radius: 0;
+        }
+        .rec-split-right {
+          color: rgba(255,255,255,0.85);
+          border-top-right-radius: 999px;
+          border-bottom-right-radius: 999px;
+          border-top-left-radius: 0;
+          border-bottom-left-radius: 0;
+        }
+        .rec-split-divider {
+          width: 2px;
+          background: #92400E;
+          align-self: stretch;
+        }
       `}</style>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-        <button
-          onClick={isRecording ? stopAudio : startStreaming}
-          className={`rec-btn ${
-            isRecording
-              ? (isMonitor ? 'rec-btn-active-monitor' : 'rec-btn-active-record')
-              : (isMonitor ? 'rec-btn-idle-monitor'  : 'rec-btn-idle-record')
-          }`}
-        >
-          {isRecording ? (
-            <span className="rec-dot" />
-          ) : (
-            <svg className="rec-mic-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              {isMonitor ? (
-                <>
-                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                  <line x1="12" y1="19" x2="12" y2="23"/>
-                  <line x1="8" y1="23" x2="16" y2="23"/>
-                </>
-              ) : (
-                <>
-                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                  <line x1="12" y1="19" x2="12" y2="23"/>
-                  <line x1="8" y1="23" x2="16" y2="23"/>
-                </>
-              )}
-            </svg>
-          )}
-          {isRecording
-            ? (isMonitor ? 'Stop Monitor' : 'Stop')
-            : (isMonitor ? 'Test Pitch' : 'Record')}
-        </button>
+        {isMonitor || isRecording ? (
+          <button
+            onClick={isRecording ? stopAudio : startStreaming}
+            className={`rec-btn ${
+              isRecording
+                ? (isMonitor ? 'rec-btn-active-monitor' : 'rec-btn-active-record')
+                : 'rec-btn-idle-monitor'
+            }`}
+          >
+            {isRecording ? (
+              <span className="rec-dot" />
+            ) : (
+              <MicIcon />
+            )}
+            {isRecording
+              ? (isMonitor ? 'Stop Monitor' : 'Stop')
+              : 'Test Pitch'}
+          </button>
+        ) : hasMarker ? (
+          <div className="rec-split-pill">
+            <button className="rec-split-btn rec-split-left" onClick={startStreaming}>
+              <MicIcon />
+              Record at Cursor
+            </button>
+            <span className="rec-split-divider" />
+            <button className="rec-split-btn rec-split-right" onClick={startFromEnd}>
+              Record at End
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={startStreaming}
+            className="rec-btn rec-btn-idle-record"
+          >
+            <MicIcon />
+            Record
+          </button>
+        )}
 
         {isRecording && !isMonitor && (
           <div className="rec-timer">

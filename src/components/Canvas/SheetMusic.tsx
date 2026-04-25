@@ -44,8 +44,9 @@ export const SheetMusic: React.FC = () => {
   const lastRenderHash = useRef<string>('');
   const noteIdMapRef = useRef<Map<string, string>>(new Map());
   const noteBoundsRef = useRef<Map<string, DOMRect>>(new Map());
+  const noteStaveYRef = useRef<Map<string, number>>(new Map());
 
-  const { notes, activeNotes, bpm, selectedNoteId, isModelRunning, loadNotesFromBackend, forceRenderTick, selectNote } = useScoreStore();
+  const { notes, activeNotes, bpm, selectedNoteId, insertionPointNoteId, isModelRunning, loadNotesFromBackend, forceRenderTick, selectNote } = useScoreStore();
 
   useEffect(() => {
     if (notes.length === 0) {
@@ -124,6 +125,7 @@ export const SheetMusic: React.FC = () => {
 
     rendererRef.current.innerHTML = '';
     const accumulatedIdMap = new Map<string, string>();
+    const accumulatedStaveY = new Map<string, number>();
 
     const measures: RenderedNote[][] = [];
     let currentMeasure: RenderedNote[] = [];
@@ -212,6 +214,13 @@ export const SheetMusic: React.FC = () => {
         }
       }
 
+      if (measureNotes) {
+        const topLineY = stave.getYForLine(0);
+        for (const mn of measureNotes) {
+          accumulatedStaveY.set(mn.id, topLineY);
+        }
+      }
+
       x += finalMeasureWidth;
     }
 
@@ -220,6 +229,7 @@ export const SheetMusic: React.FC = () => {
     renderer.resize(containerWidth, finalHeight);
 
     noteIdMapRef.current = accumulatedIdMap;
+    noteStaveYRef.current = accumulatedStaveY;
 
     // Build bounding box map for popover positioning
     const svgEl = rendererRef.current.querySelector('svg');
@@ -242,6 +252,44 @@ export const SheetMusic: React.FC = () => {
   }, [notes, activeNotes, bpm, selectedNoteId]);
 
   const selectedBounds = selectedNoteId ? noteBoundsRef.current.get(selectedNoteId) : null;
+
+  const insertionCursorStyle = (() => {
+    if (!insertionPointNoteId || isModelRunning || !scrollContainerRef.current || !rendererRef.current) return null;
+    const svgEl = rendererRef.current.querySelector('svg');
+    if (!svgEl) return null;
+
+    // rendererRef sits inside scrollContainerRef (position: relative). offsetTop/offsetLeft give
+    // the offset from the container's padding edge — the same coordinate system the absolute-positioned
+    // cursor uses. This keeps the cursor aligned with the SVG content regardless of container padding/border.
+    const svgOffsetTop = rendererRef.current.offsetTop;
+    const svgOffsetLeft = rendererRef.current.offsetLeft;
+
+    // VexFlow defaults: 4 line-spaces above the top stave line, 5 staff lines × 10px spacing.
+    // Top staff line of the first system therefore sits at START_Y + 40; staff height (top→bottom line) is 40px.
+    const FIRST_STAVE_TOP_LINE_Y = START_Y + 40;
+    const STAVE_HEIGHT = 40;
+
+    if (insertionPointNoteId === '__START__') {
+      return {
+        top: svgOffsetTop + FIRST_STAVE_TOP_LINE_Y,
+        left: svgOffsetLeft + START_X + 60,
+        height: STAVE_HEIGHT,
+      };
+    }
+
+    const staveTopLineY = noteStaveYRef.current.get(insertionPointNoteId);
+    const ipBounds = noteBoundsRef.current.get(insertionPointNoteId);
+    if (staveTopLineY === undefined || !ipBounds) return null;
+
+    const svgRect = svgEl.getBoundingClientRect();
+    const noteInternalX = ipBounds.x - svgRect.x;
+
+    return {
+      top: svgOffsetTop + staveTopLineY,
+      left: svgOffsetLeft + noteInternalX + ipBounds.width + 4,
+      height: STAVE_HEIGHT,
+    };
+  })();
 
   return (
     <div
@@ -268,6 +316,27 @@ export const SheetMusic: React.FC = () => {
           containerRef={scrollContainerRef}
         />
       )}
+      {insertionCursorStyle && (
+        <div
+          style={{
+            position: 'absolute',
+            top: insertionCursorStyle.top,
+            left: insertionCursorStyle.left,
+            width: 2,
+            height: insertionCursorStyle.height,
+            background: '#F97316',
+            borderRadius: 1,
+            zIndex: 50,
+            animation: 'insertion-pulse 1.2s ease-in-out infinite',
+          }}
+        />
+      )}
+      <style>{`
+        @keyframes insertion-pulse {
+          0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(249,115,22,0.5); }
+          50% { opacity: 0.4; box-shadow: 0 0 2px rgba(249,115,22,0.2); }
+        }
+      `}</style>
       <div ref={bottomAnchorRef} style={{ height: 1 }} />
     </div>
   );

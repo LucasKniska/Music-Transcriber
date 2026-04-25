@@ -9,7 +9,7 @@ interface NoteEditPopoverProps {
 }
 
 export const NoteEditPopover: React.FC<NoteEditPopoverProps> = ({ noteId, bounds, containerRef }) => {
-  const { notes, selectNote, deleteNote, shiftPitch, cycleDuration, insertNoteAfter, combineIntoChord } = useScoreStore();
+  const { notes, selectNote, deleteNote, shiftPitch, cycleDuration, insertNoteAfter, combineIntoChord, setInsertionPoint } = useScoreStore();
 
   const noteIndex = useMemo(() => notes.findIndex(n => n.id === noteId), [notes, noteId]);
   const note = noteIndex !== -1 ? notes[noteIndex] : null;
@@ -42,7 +42,7 @@ export const NoteEditPopover: React.FC<NoteEditPopoverProps> = ({ noteId, bounds
   const relX = bounds.x - containerRect.x + bounds.width / 2;
   const relY = bounds.y - containerRect.y + scrollTop;
 
-  const POPOVER_WIDTH = 420;
+  const POPOVER_WIDTH = 490;
   const POPOVER_HEIGHT = 80;
   const GAP = 12;
 
@@ -113,6 +113,12 @@ export const NoteEditPopover: React.FC<NoteEditPopoverProps> = ({ noteId, bounds
           <PopoverBtn label="Chord R" onClick={() => combineIntoChord(noteId, 'right')}
             disabled={isLast} icon={<ChordRightIcon />} />
         </BtnGroup>
+
+        <Divider />
+
+        {/* Record from here */}
+        <PopoverBtn label="Rec Here" onClick={() => setInsertionPoint(noteId)}
+          variant="record" icon={<RecordHereIcon />} />
       </motion.div>
     </AnimatePresence>
   );
@@ -130,13 +136,17 @@ interface PopoverBtnProps {
   label: string;
   onClick: () => void;
   disabled?: boolean;
-  variant?: 'danger';
+  variant?: 'danger' | 'record';
   icon: React.ReactNode;
 }
 
+const variantColors: Record<string, { color: string; hoverBg: string }> = {
+  danger: { color: '#dc2626', hoverBg: 'rgba(220,38,38,0.08)' },
+  record: { color: '#F97316', hoverBg: 'rgba(249,115,22,0.12)' },
+};
+
 const PopoverBtn: React.FC<PopoverBtnProps> = ({ label, onClick, disabled, variant, icon }) => {
-  const baseColor = variant === 'danger' ? '#dc2626' : '#92400E';
-  const hoverBg = variant === 'danger' ? 'rgba(220,38,38,0.08)' : 'rgba(249,115,22,0.1)';
+  const { color: baseColor, hoverBg } = variant ? variantColors[variant] : { color: '#92400E', hoverBg: 'rgba(249,115,22,0.1)' };
 
   return (
     <button
@@ -236,5 +246,12 @@ const ChordRightIcon = () => (
     <circle cx="6" cy="7" r="2" fill="currentColor" stroke="none" />
     <circle cx="6" cy="12" r="2" fill="currentColor" stroke="none" />
     <path d="M8 12V5" />
+  </svg>
+);
+
+const RecordHereIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="9" cy="9" r="5" fill="currentColor" opacity="0.85" />
+    <path d="M3 9h2M13 9h2" stroke="currentColor" />
   </svg>
 );

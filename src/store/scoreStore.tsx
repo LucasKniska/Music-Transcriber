@@ -30,6 +30,7 @@ interface ScoreState {
   currentPitch: string | null;
   isModelRunning: boolean;
   selectedNoteId: string | null;
+  insertionPointNoteId: string | null;
 
   setBpm: (newBpm: number) => void;
   setModelRunning: (v: boolean) => void;
@@ -47,6 +48,10 @@ interface ScoreState {
   cycleDuration: (noteId: string, direction: 'longer' | 'shorter') => void;
   insertNoteAfter: (noteId: string) => void;
   combineIntoChord: (noteId: string, direction: 'left' | 'right') => void;
+
+  setInsertionPoint: (noteId: string | null) => void;
+  clearInsertionPoint: () => void;
+  startRecordingAtInsertionPoint: () => void;
 
   saveRecording: (title: string) => Promise<string | null>;
   loadSheet: (notes: RenderedNote[], bpm: number) => void;
@@ -69,6 +74,7 @@ export const useScoreStore = create<ScoreState>()(
       currentPitch: null,
       isModelRunning: false,
       selectedNoteId: null,
+      insertionPointNoteId: null,
 
       setBpm: (newBpm) => set({ bpm: newBpm }),
       setCurrentPitch: (note) => set({ currentPitch: note }),
@@ -77,8 +83,12 @@ export const useScoreStore = create<ScoreState>()(
       selectNote: (noteId) => set({ selectedNoteId: noteId }),
 
       deleteNote: (noteId) => {
-        const { notes: currentNotes } = get();
-        set({ notes: currentNotes.filter(n => n.id !== noteId), selectedNoteId: null });
+        const { notes: currentNotes, insertionPointNoteId } = get();
+        set({
+          notes: currentNotes.filter(n => n.id !== noteId),
+          selectedNoteId: null,
+          insertionPointNoteId: insertionPointNoteId === noteId ? null : insertionPointNoteId,
+        });
       },
 
       shiftPitch: (noteId, direction) => {
@@ -134,6 +144,25 @@ export const useScoreStore = create<ScoreState>()(
           .filter(n => n.id !== noteId)
           .map(n => n.id === target.id ? { ...n, keys: mergedKeys } : n);
         set({ notes: updated, selectedNoteId: target.id });
+      },
+
+      setInsertionPoint: (noteId) => set({ insertionPointNoteId: noteId, selectedNoteId: null }),
+
+      clearInsertionPoint: () => set({ insertionPointNoteId: null }),
+
+      startRecordingAtInsertionPoint: () => {
+        const { notes: currentNotes, insertionPointNoteId } = get();
+        if (insertionPointNoteId === null) return;
+        if (insertionPointNoteId === '__START__') {
+          set({ notes: [], insertionPointNoteId: null });
+        } else {
+          const idx = currentNotes.findIndex(n => n.id === insertionPointNoteId);
+          if (idx === -1) {
+            set({ insertionPointNoteId: null });
+            return;
+          }
+          set({ notes: currentNotes.slice(0, idx + 1), insertionPointNoteId: null });
+        }
       },
 
       handleNoteOn: (midi, noteName, chordMidis?) => {
@@ -284,7 +313,7 @@ export const useScoreStore = create<ScoreState>()(
           if (group.timerId) clearTimeout(group.timerId);
         }
         pendingChordNotes.clear();
-        set({ notes: [], activeNotes: new Map(), selectedNoteId: null });
+        set({ notes: [], activeNotes: new Map(), selectedNoteId: null, insertionPointNoteId: null });
         clearAllNotes().catch(e => console.error(e));
       },
 
